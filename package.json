@@ -1,0 +1,22 @@
+{
+  "name": "skarot-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.5",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}
