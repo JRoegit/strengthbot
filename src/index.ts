@@ -264,6 +264,7 @@ function buildHelpReply(): string {
     "",
     "❓ **.help** — Show this command list",
     "👤 **.me** — Show your currently stored stats and rankings",
+    "🔎 **.user <playerId|username>** — Look up another player's stored stats",
     "🏆 **.top packs** — Show the top 10 by packs opened",
     "⚔️ **.top battles** — Show the top 10 by battles won",
     "💸 **.top cash** — Show the top 10 by cash per second",
@@ -426,6 +427,20 @@ function buildPenalizeUsageReply(): string {
   return "ℹ️ Use `.penalize <playerId> <packs> <battles> <cash> <card>`.";
 }
 
+function findSubmissionByLookup(lookup: string): StoredSubmission | null {
+  const trimmedLookup = lookup.trim();
+  if (!trimmedLookup) {
+    return null;
+  }
+
+  const byUserId = store.getLatestByUserId(trimmedLookup);
+  if (byUserId) {
+    return byUserId;
+  }
+
+  return store.getLatestByUsername(trimmedLookup);
+}
+
 function parsePenaltyArguments(content: string): {
   userId: string;
   packsOpened: string;
@@ -475,6 +490,23 @@ client.on(Events.MessageCreate, async (message) => {
 
     if (!submission) {
       await message.reply("📭 I don't have any stored stats for you yet. Submit a screenshot first.");
+      return;
+    }
+
+    await message.reply(buildMeReply(submission));
+    return;
+  }
+
+  if (message.content.trim().toLowerCase().startsWith(".user")) {
+    const lookup = message.content.trim().slice(".user".length).trim();
+    if (!lookup) {
+      await message.reply("ℹ️ Use `.user <playerId>` or `.user <username>`.");
+      return;
+    }
+
+    const submission = findSubmissionByLookup(lookup);
+    if (!submission) {
+      await message.reply(`📭 I couldn't find any stored stats for **${lookup}**.`);
       return;
     }
 

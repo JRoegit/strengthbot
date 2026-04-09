@@ -23,6 +23,10 @@ export class SubmissionStore {
     ensureDatabaseFile(filePath);
   }
 
+  private normalizeUsername(username: string): string {
+    return username.trim().toLowerCase();
+  }
+
   private read(): DatabaseShape {
     const raw = fs.readFileSync(this.filePath, "utf8");
     return JSON.parse(raw) as DatabaseShape;
@@ -53,6 +57,17 @@ export class SubmissionStore {
   getLatestByUserId(userId: string): StoredSubmission | null {
     const submissions = this.read().submissions
       .filter((submission) => submission.userId === userId)
+      .sort((left, right) => {
+        return new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime();
+      });
+
+    return submissions[0] ?? null;
+  }
+
+  getLatestByUsername(username: string): StoredSubmission | null {
+    const normalizedUsername = this.normalizeUsername(username);
+    const submissions = this.read().submissions
+      .filter((submission) => this.normalizeUsername(submission.username) === normalizedUsername)
       .sort((left, right) => {
         return new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime();
       });
