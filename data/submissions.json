@@ -719,6 +719,36 @@
       "battlesWon": "30500",
       "incomePerSecond": "3160000000000000",
       "bestCard": "864000000000000"
+    },
+    {
+      "id": "2892fd31-48be-4316-af2f-f11e9b545cb4",
+      "messageId": "1491582605928169622",
+      "channelId": "1488660854865137734",
+      "guildId": "1335972614711148654",
+      "userId": "1410718067822170187",
+      "submittedAt": "2026-04-08T23:36:45.518Z",
+      "imageUrl": "https://cdn.discordapp.com/attachments/1488660854865137734/1491582605685035048/20260408_193628.jpg?ex=69d8380d&is=69d6e68d&hm=c1b1c0cd18e18b2459260f9e6cb2117c162764b39f206f19d1a9f31f50fe32f5&",
+      "rawModelOutput": "{\"username\":\"Get2daCHOPPR111\",\"packsOpened\":\"3.85K\",\"battlesWon\":\"87.1K\",\"incomePerSecond\":\"746T\",\"bestCard\":\"$268T/s\"}",
+      "username": "Get2daCHOPPR111",
+      "packsOpened": "3850",
+      "battlesWon": "87100",
+      "incomePerSecond": "746000000000000",
+      "bestCard": "268000000000000"
+    },
+    {
+      "id": "4f047617-c532-4cbf-9609-d7424f856f04",
+      "messageId": "1491583087836921856",
+      "channelId": "1488660854865137734",
+      "guildId": "1335972614711148654",
+      "userId": "1368635607307255831",
+      "submittedAt": "2026-04-08T23:38:40.414Z",
+      "imageUrl": "https://cdn.discordapp.com/attachments/1488660854865137734/1491583087585394758/IMG_6076.jpg?ex=69d83880&is=69d6e700&hm=6251286f0ac7ecc87b5f5013054afcc52c5d34b77a8c833f743502153926afe8&",
+      "rawModelOutput": "{\"username\":\"TitanSlayerYT\",\"packsOpened\":\"662\",\"battlesWon\":\"521\",\"incomePerSecond\":\"45.0T\",\"bestCard\":\"$28.9T/s\"}",
+      "username": "TitanSlayerYT",
+      "packsOpened": "662",
+      "battlesWon": "521",
+      "incomePerSecond": "45000000000000",
+      "bestCard": "28900000000000"
     }
   ]
 }

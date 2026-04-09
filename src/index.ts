@@ -8,9 +8,11 @@ import {
   Message
 } from "discord.js";
 import { config } from "./config.js";
+import { parseCompactNumberToString, subtractClamped } from "./numberUtils.js";
+import { PenaltyStore } from "./penaltyStore.js";
 import { VisionParser } from "./openaiParser.js";
 import { SubmissionStore } from "./storage.js";
-import type { StoredSubmission } from "./types.js";
+import type { PenaltyProfile, StoredSubmission } from "./types.js";
 
 type LeaderboardCategory = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard";
 
@@ -105,12 +107,12 @@ function buildSubmissionFailureReply(error: unknown): string {
   ].join("\n");
 }
 
-function canRunBacklog(member: GuildMember | null): boolean {
-  if (!config.backlogRoleId) {
+function canRunDevCommand(member: GuildMember | null): boolean {
+  if (!config.devRoleId) {
     return false;
   }
 
-  return member?.roles.cache.has(config.backlogRoleId) ?? false;
+  return member?.roles.cache.has(config.devRoleId) ?? false;
 }
 
 function formatStoredStatsMessage(): string {
@@ -268,11 +270,30 @@ function buildHelpReply(): string {
     "🃏 **.top card** — Show the top 10 by best card"
   ];
 
-  if (config.backlogRoleId) {
+  if (config.devRoleId) {
     lines.push("🛠️ **.backlog** — Admin-only backfill of missing users from submission history");
   }
 
+  if (config.devRoleId) {
+    lines.push("🧹 **.remove <playerId>** — Dev-only removal of a stored player entry");
+    lines.push("⚖️ **.penalize <playerId> <packs> <battles> <cash> <card>** — Dev-only deductions applied on future submissions");
+  }
+
   return lines.join("\n");
+}
+
+function applyPenalty(submission: StoredSubmission, penalty: PenaltyProfile | null): StoredSubmission {
+  if (!penalty) {
+    return submission;
+  }
+
+  return {
+    ...submission,
+    packsOpened: subtractClamped(submission.packsOpened, penalty.packsOpened),
+    battlesWon: subtractClamped(submission.battlesWon, penalty.battlesWon),
+    incomePerSecond: subtractClamped(submission.incomePerSecond, penalty.incomePerSecond),
+    bestCard: subtractClamped(submission.bestCard, penalty.bestCard)
+  };
 }
 
 async function storeParsedSubmission(message: Message, imageUrl: string): Promise<StoredSubmission> {
@@ -290,8 +311,9 @@ async function storeParsedSubmission(message: Message, imageUrl: string): Promis
     ...parsed
   };
 
-  store.insert(submission);
-  return submission;
+  const penalizedSubmission = applyPenalty(submission, penaltyStore.getByUserId(message.author.id));
+  store.insert(penalizedSubmission);
+  return penalizedSubmission;
 }
 
 async function runBacklog(commandMessage: Message): Promise<string> {
@@ -374,14 +396,56 @@ async function runBacklogPreflight(commandMessage: Message): Promise<string | nu
     return "\u26D4 `.backlog` can only be used inside the server.";
   }
 
-  if (!config.backlogRoleId) {
-    return "\u26A0\uFE0F `.backlog` is not configured yet. Set `BACKLOG_ROLE_ID` in the bot's environment.";
+  if (!config.devRoleId) {
+    return "\u26A0\uFE0F `.backlog` is not configured yet. Set `DEV_ROLE_ID` in the bot's environment.";
   }
 
-  if (!canRunBacklog(commandMessage.member)) {
+  if (!canRunDevCommand(commandMessage.member)) {
     return "\u26D4 You don't have permission to run `.backlog`.";
   }
   return null;
+}
+
+function runDevCommandPreflight(commandMessage: Message, commandName: string): string | null {
+  if (!commandMessage.inGuild()) {
+    return `\u26D4 \`${commandName}\` can only be used inside the server.`;
+  }
+
+  if (!config.devRoleId) {
+    return `\u26A0\uFE0F \`${commandName}\` is not configured yet. Set \`DEV_ROLE_ID\` in the bot's environment.`;
+  }
+
+  if (!canRunDevCommand(commandMessage.member)) {
+    return `\u26D4 You don't have permission to run \`${commandName}\`.`;
+  }
+
+  return null;
+}
+
+function buildPenalizeUsageReply(): string {
+  return "ℹ️ Use `.penalize <playerId> <packs> <battles> <cash> <card>`.";
+}
+
+function parsePenaltyArguments(content: string): {
+  userId: string;
+  packsOpened: string;
+  battlesWon: string;
+  incomePerSecond: string;
+  bestCard: string;
+} {
+  const [, userId = "", packs = "", battles = "", cash = "", card = ""] = content.trim().split(/\s+/);
+
+  if (!userId || !packs || !battles || !cash || !card) {
+    throw new Error("Missing penalty arguments.");
+  }
+
+  return {
+    userId,
+    packsOpened: parseCompactNumberToString(packs),
+    battlesWon: parseCompactNumberToString(battles),
+    incomePerSecond: parseCompactNumberToString(cash),
+    bestCard: parseCompactNumberToString(card)
+  };
 }
 
 const client = new Client({
@@ -393,6 +457,7 @@ const client = new Client({
 });
 
 const store = new SubmissionStore(config.dataFile);
+const penaltyStore = new PenaltyStore(config.penaltyFile);
 const parser = new VisionParser(config.openAiApiKey, config.openAiModel);
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -422,6 +487,45 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (message.content.trim().toLowerCase().startsWith(".penalize")) {
+    const permissionResult = runDevCommandPreflight(message, ".penalize");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    try {
+      const penaltyArgs = parsePenaltyArguments(message.content);
+      const penalty: PenaltyProfile = {
+        ...penaltyArgs,
+        updatedAt: new Date().toISOString()
+      };
+
+      penaltyStore.upsert(penalty);
+
+      await message.reply([
+        "⚖️ **Penalty saved**",
+        "",
+        `**Player ID:** ${penalty.userId}`,
+        "These deductions will be applied to future submissions from this Discord user.",
+        `**Packs deduction:** ${formatCompactValue(penalty.packsOpened)}`,
+        `**Battles deduction:** ${formatCompactValue(penalty.battlesWon)}`,
+        `**Cash/s deduction:** ${formatCompactValue(penalty.incomePerSecond, false, true)}`,
+        `**Best Card deduction:** ${formatCompactValue(penalty.bestCard, true, true)}`
+      ].join("\n"));
+      return;
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes("Missing penalty arguments.") || error.message.includes("Could not parse numeric value") || error.message.includes("Unsupported numeric value"))) {
+        await message.reply(`${buildPenalizeUsageReply()} Numeric values can use suffixes like \`1.2K\`, \`3M\`, or \`4Qa\`.`);
+        return;
+      }
+
+      console.error("Failed to save penalty", error);
+      await message.reply("⚠️ I couldn't save that penalty. Please try again.");
+      return;
+    }
+  }
+
   if (message.content.trim().toLowerCase() === ".backlog") {
     const permissionResult = await runBacklogPreflight(message);
     if (permissionResult) {
@@ -432,6 +536,29 @@ client.on(Events.MessageCreate, async (message) => {
     await message.reply("🛠️ Running backlog import. This may take a little while...");
     const result = await runBacklog(message);
     await message.reply(result);
+    return;
+  }
+
+  if (message.content.trim().toLowerCase().startsWith(".remove")) {
+    const permissionResult = runDevCommandPreflight(message, ".remove");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const [, playerId = ""] = message.content.trim().split(/\s+/, 2);
+    if (!playerId) {
+      await message.reply("ℹ️ Use `.remove <playerId>` to remove a stored entry by Discord user ID.");
+      return;
+    }
+
+    const removedSubmission = store.removeByUserId(playerId);
+    if (!removedSubmission) {
+      await message.reply(`📭 No stored entry was found for player ID **${playerId}**.`);
+      return;
+    }
+
+    await message.reply(`🧹 Removed stored entry for **${removedSubmission.username}** (${removedSubmission.userId}).`);
     return;
   }
 

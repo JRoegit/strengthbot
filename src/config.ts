@@ -18,5 +18,6 @@ export const config = {
   openAiApiKey: requireEnv("OPENAI_API_KEY"),
   openAiModel: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
   dataFile: path.resolve(process.env.DATA_FILE?.trim() || "./data/submissions.json"),
-  backlogRoleId: process.env.BACKLOG_ROLE_ID?.trim() || ""
+  penaltyFile: path.resolve(process.env.PENALTY_FILE?.trim() || "./data/penalties.json"),
+  devRoleId: process.env.DEV_ROLE_ID?.trim() || ""
 };

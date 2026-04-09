@@ -15,9 +15,10 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
   - `bestCard`
 - Converts values like `1.23K`, `4.5M`, and `2B` into full integers
 - Saves submissions to `data/submissions.json`
+- Stores penalties separately in `data/penalties.json`
 - Supports a `.me` command to show a user's latest stored stats
 - Supports `.top packs`, `.top battles`, `.top cash`, and `.top card` for top 10 lists
-- Supports an admin-only `.backlog` command to import missing users from channel history
+- Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <packs> <battles> <cash> <card>` commands
 
 ## Setup
 
@@ -31,7 +32,8 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
    - `DISCORD_TOKEN`
    - `DISCORD_CHANNEL_ID`
    - `OPENAI_API_KEY`
-   - `BACKLOG_ROLE_ID` if you want to restrict `.backlog` to a specific role
+   - `PENALTY_FILE` if you want a custom penalty storage path
+   - `DEV_ROLE_ID` for `.backlog` and other dev-only commands
 4. Install dependencies:
 
 ```bash

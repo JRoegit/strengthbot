@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { parseCompactNumberToString } from "./numberUtils.js";
 import type { ParsedSubmission } from "./types.js";
 
 const OUTPUT_SCHEMA = {
@@ -19,53 +20,6 @@ const OUTPUT_SCHEMA = {
     bestCard: { type: "string" }
   }
 } as const;
-
-const MAGNITUDE_SUFFIXES: Record<string, bigint> = {
-  K: 1_000n,
-  M: 1_000_000n,
-  B: 1_000_000_000n,
-  T: 1_000_000_000_000n,
-  QA: 1_000_000_000_000_000n,
-  QD: 1_000_000_000_000_000_000n,
-  QT: 1_000_000_000_000_000_000n,
-  QI: 1_000_000_000_000_000_000_000n,
-  SX: 1_000_000_000_000_000_000_000_000n,
-  SP: 1_000_000_000_000_000_000_000_000_000n,
-  OC: 1_000_000_000_000_000_000_000_000_000_000n,
-  NO: 1_000_000_000_000_000_000_000_000_000_000_000n,
-  DC: 1_000_000_000_000_000_000_000_000_000_000_000_000n
-};
-
-function normalizeCompactNumber(value: string): string {
-  const cleaned = value
-    .replace(/[$\u20AC,]/g, "")
-    .replace(/\/S$/i, "")
-    .replace(/\s+/g, "")
-    .trim()
-    .toUpperCase();
-
-  const match = cleaned.match(/^(-?\d+(?:\.\d+)?)([A-Z]+)?$/);
-  if (!match) {
-    throw new Error(`Could not parse numeric value: "${value}"`);
-  }
-
-  const amount = match[1];
-  const suffix = match[2] ?? "";
-  const multiplier = suffix ? MAGNITUDE_SUFFIXES[suffix] : 1n;
-
-  if (multiplier === undefined) {
-    throw new Error(`Unsupported numeric value: "${value}"`);
-  }
-
-  const [wholePart, decimalPart = ""] = amount.split(".");
-  const decimalScale = 10n ** BigInt(decimalPart.length);
-  const whole = BigInt(wholePart);
-  const fraction = decimalPart ? BigInt(decimalPart) : 0n;
-  const scaledAmount = (whole * decimalScale) + fraction;
-  const result = (scaledAmount * multiplier) / decimalScale;
-
-  return result.toString();
-}
 
 function sanitizeUsername(username: string): string {
   return username.trim();
@@ -150,10 +104,10 @@ export class VisionParser {
     const payload = JSON.parse(rawText) as Record<string, string>;
     const parsed: ParsedSubmission = validateParsedSubmission({
       username: sanitizeUsername(payload.username),
-      packsOpened: normalizeCompactNumber(payload.packsOpened),
-      battlesWon: normalizeCompactNumber(payload.battlesWon),
-      incomePerSecond: normalizeCompactNumber(payload.incomePerSecond),
-      bestCard: normalizeCompactNumber(payload.bestCard)
+      packsOpened: parseCompactNumberToString(payload.packsOpened),
+      battlesWon: parseCompactNumberToString(payload.battlesWon),
+      incomePerSecond: parseCompactNumberToString(payload.incomePerSecond),
+      bestCard: parseCompactNumberToString(payload.bestCard)
     });
 
     return { parsed, rawText };

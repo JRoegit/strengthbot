@@ -64,6 +64,19 @@ export class SubmissionStore {
     return this.read().submissions.some((submission) => submission.userId === userId);
   }
 
+  removeByUserId(userId: string): StoredSubmission | null {
+    const data = this.read();
+    const submission = data.submissions.find((entry) => entry.userId === userId) ?? null;
+
+    if (!submission) {
+      return null;
+    }
+
+    data.submissions = data.submissions.filter((entry) => entry.userId !== userId);
+    this.write(data);
+    return submission;
+  }
+
   getTopByCategory(category: SortableSubmissionField, limit: number): StoredSubmission[] {
     return this.read().submissions
       .slice()

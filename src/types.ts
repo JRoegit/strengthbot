@@ -16,3 +16,12 @@ export type StoredSubmission = ParsedSubmission & {
   imageUrl: string;
   rawModelOutput: string;
 };
+
+export type PenaltyProfile = {
+  userId: string;
+  packsOpened: string;
+  battlesWon: string;
+  incomePerSecond: string;
+  bestCard: string;
+  updatedAt: string;
+};
