@@ -206,8 +206,6 @@ function formatCompactValue(value: string, currencyPrefix = false, perSecondSuff
     "B",
     "T",
     "Qa",
-    "Qd",
-    "Qt",
     "Qi",
     "Sx",
     "Sp",
