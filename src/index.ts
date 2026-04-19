@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
   Attachment,
+  AttachmentBuilder,
   Client,
   Events,
   GuildMember,
   GatewayIntentBits,
-  Message
+  Message,
+  Partials
 } from "discord.js";
 import { config } from "./config.js";
 import { parseCompactNumberToString, subtractClamped } from "./numberUtils.js";
@@ -14,7 +16,7 @@ import { VisionParser } from "./openaiParser.js";
 import { SubmissionStore } from "./storage.js";
 import type { PenaltyProfile, StoredSubmission } from "./types.js";
 
-type LeaderboardCategory = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard";
+type LeaderboardCategory = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
 
 type OpenAiLikeError = {
   status?: number;
@@ -123,7 +125,8 @@ function formatStoredStatsMessage(): string {
     "📦 **Packs Opened:** {packsOpened} {packsRank}",
     "⚔️ **Battles Won:** {battlesWon} {battlesRank}",
     "💸 **Cash/s:** {incomePerSecond} {cashRank}",
-    "🃏 **Best Card:** {bestCard} {cardRank}"
+    "🃏 **Best Card:** {bestCard} {cardRank}",
+    "📚 **Total Card Level:** {totalCardLevel} {cardLevelRank}"
   ].join("\n");
 }
 
@@ -145,7 +148,9 @@ function buildMeReply(submission: StoredSubmission): string {
     .replace("{incomePerSecond}", formatLeaderboardValue("incomePerSecond", submission.incomePerSecond))
     .replace("{cashRank}", formatRank(store.getRankByUserId(submission.userId, "incomePerSecond")))
     .replace("{bestCard}", formatLeaderboardValue("bestCard", submission.bestCard))
-    .replace("{cardRank}", formatRank(store.getRankByUserId(submission.userId, "bestCard")));
+    .replace("{cardRank}", formatRank(store.getRankByUserId(submission.userId, "bestCard")))
+    .replace("{totalCardLevel}", formatLeaderboardValue("totalCardLevel", submission.totalCardLevel))
+    .replace("{cardLevelRank}", formatRank(store.getRankByUserId(submission.userId, "totalCardLevel")));
 }
 
 function parseTopCategory(value: string): LeaderboardCategory | null {
@@ -167,6 +172,10 @@ function parseTopCategory(value: string): LeaderboardCategory | null {
     return "bestCard";
   }
 
+  if (normalized === "cardlevel" || normalized === "totalcardlevel" || normalized === "level") {
+    return "totalCardLevel";
+  }
+
   return null;
 }
 
@@ -180,6 +189,8 @@ function getCategoryLabel(category: LeaderboardCategory): string {
       return "Cash/s";
     case "bestCard":
       return "Best Card";
+    case "totalCardLevel":
+      return "Total Card Level";
   }
 }
 
@@ -268,7 +279,8 @@ function buildHelpReply(): string {
     "🏆 **.top packs** — Show the top 10 by packs opened",
     "⚔️ **.top battles** — Show the top 10 by battles won",
     "💸 **.top cash** — Show the top 10 by cash per second",
-    "🃏 **.top card** — Show the top 10 by best card"
+    "🃏 **.top card** — Show the top 10 by best card",
+    "📚 **.top cardlevel** — Show the top 10 by total card level"
   ];
 
   if (config.devRoleId) {
@@ -278,6 +290,7 @@ function buildHelpReply(): string {
   if (config.devRoleId) {
     lines.push("🧹 **.remove <playerId>** — Dev-only removal of a stored player entry");
     lines.push("⚖️ **.penalize <playerId> <packs> <battles> <cash> <card>** — Dev-only deductions applied on future submissions");
+    lines.push("🖼️ **.submission <playerId|username>** — Dev-only lookup of the stored submission image");
   }
 
   return lines.join("\n");
@@ -294,6 +307,8 @@ function applyPenalty(submission: StoredSubmission, penalty: PenaltyProfile | nu
     battlesWon: subtractClamped(submission.battlesWon, penalty.battlesWon),
     incomePerSecond: subtractClamped(submission.incomePerSecond, penalty.incomePerSecond),
     bestCard: subtractClamped(submission.bestCard, penalty.bestCard)
+    ,
+    totalCardLevel: subtractClamped(submission.totalCardLevel, penalty.totalCardLevel)
   };
 }
 
@@ -459,7 +474,8 @@ function parsePenaltyArguments(content: string): {
     packsOpened: parseCompactNumberToString(packs),
     battlesWon: parseCompactNumberToString(battles),
     incomePerSecond: parseCompactNumberToString(cash),
-    bestCard: parseCompactNumberToString(card)
+    bestCard: parseCompactNumberToString(card),
+    totalCardLevel: "0"
   };
 }
 
@@ -468,6 +484,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel
   ]
 });
 
@@ -478,6 +498,19 @@ const parser = new VisionParser(config.openAiApiKey, config.openAiModel);
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   console.log(`Monitoring channel ${config.discordChannelId}`);
+});
+
+client.on(Events.MessageDelete, async (message) => {
+  if (message.channelId !== config.discordChannelId) {
+    return;
+  }
+
+  const removedSubmission = store.removeByMessageId(message.id);
+  if (!removedSubmission) {
+    return;
+  }
+
+  console.log(`Removed submission for ${removedSubmission.username} because message ${message.id} was deleted.`);
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -543,7 +576,8 @@ client.on(Events.MessageCreate, async (message) => {
         `**Packs deduction:** ${formatCompactValue(penalty.packsOpened)}`,
         `**Battles deduction:** ${formatCompactValue(penalty.battlesWon)}`,
         `**Cash/s deduction:** ${formatCompactValue(penalty.incomePerSecond, false, true)}`,
-        `**Best Card deduction:** ${formatCompactValue(penalty.bestCard, true, true)}`
+        `**Best Card deduction:** ${formatCompactValue(penalty.bestCard, true, true)}`,
+        `**Total Card Level deduction:** ${formatCompactValue(penalty.totalCardLevel)}`
       ].join("\n"));
       return;
     } catch (error) {
@@ -556,6 +590,39 @@ client.on(Events.MessageCreate, async (message) => {
       await message.reply("⚠️ I couldn't save that penalty. Please try again.");
       return;
     }
+  }
+
+  if (message.content.trim().toLowerCase().startsWith(".submission")) {
+    const permissionResult = runDevCommandPreflight(message, ".submission");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const lookup = message.content.trim().slice(".submission".length).trim();
+    if (!lookup) {
+      await message.reply("ℹ️ Use `.submission <playerId>` or `.submission <username>`.");
+      return;
+    }
+
+    const submission = findSubmissionByLookup(lookup);
+    if (!submission) {
+      await message.reply(`📭 I couldn't find a stored submission for **${lookup}**.`);
+      return;
+    }
+
+    await message.reply({
+      content: [
+        "🖼️ **Stored Submission Image**",
+        "",
+        `**Username:** ${submission.username}`,
+        `**Player ID:** ${submission.userId}`
+      ].join("\n"),
+      files: [
+        new AttachmentBuilder(submission.imageUrl)
+      ]
+    });
+    return;
   }
 
   if (message.content.trim().toLowerCase() === ".backlog") {
@@ -599,7 +666,7 @@ client.on(Events.MessageCreate, async (message) => {
     const category = parseTopCategory(categoryInput);
 
     if (!category) {
-      await message.reply("ℹ️ Use `.top packs`, `.top battles`, `.top cash`, or `.top card`.");
+      await message.reply("ℹ️ Use `.top packs`, `.top battles`, `.top cash`, `.top card`, or `.top cardlevel`.");
       return;
     }
 

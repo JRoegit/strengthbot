@@ -4,6 +4,7 @@ export type ParsedSubmission = {
   battlesWon: string;
   incomePerSecond: string;
   bestCard: string;
+  totalCardLevel: string;
 };
 
 export type StoredSubmission = ParsedSubmission & {
@@ -23,5 +24,6 @@ export type PenaltyProfile = {
   battlesWon: string;
   incomePerSecond: string;
   bestCard: string;
+  totalCardLevel: string;
   updatedAt: string;
 };

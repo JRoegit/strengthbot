@@ -10,14 +10,16 @@ const OUTPUT_SCHEMA = {
     "packsOpened",
     "battlesWon",
     "incomePerSecond",
-    "bestCard"
+    "bestCard",
+    "totalCardLevel"
   ],
   properties: {
     username: { type: "string" },
     packsOpened: { type: "string" },
     battlesWon: { type: "string" },
     incomePerSecond: { type: "string" },
-    bestCard: { type: "string" }
+    bestCard: { type: "string" },
+    totalCardLevel: { type: "string" }
   }
 } as const;
 
@@ -58,7 +60,8 @@ export class VisionParser {
                 "Only use the blue stats menu box in the screenshot.",
                 "Ignore all other scoreboards, overlays, HUD elements, captions, and background text outside that blue box.",
                 "Inside the blue box, the top centered line is the username.",
-                "Then extract the four values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard.",
+                "Then extract the values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel.",
+                "If totalCardLevel is not present in the screenshot, return 0 for totalCardLevel.",
                 "Labels may be in English, German, Italian, or another localized language.",
                 "Return each numeric field exactly as it appears, preserving suffixes like K, M, B, T, Qa, Qt and decorations like $ or /s if present.",
                 "The image may be blurry, discolored, skewed, cropped, or photographed from a screen.",
@@ -73,7 +76,7 @@ export class VisionParser {
             {
               type: "input_text",
               text: [
-                "Extract the username and the four stat values from the blue stats box only.",
+                "Extract the username and the stat values from the blue stats box only.",
                 "Do not read values from any leaderboard or overlay outside the blue box."
               ].join(" ")
             },
@@ -107,7 +110,8 @@ export class VisionParser {
       packsOpened: parseCompactNumberToString(payload.packsOpened),
       battlesWon: parseCompactNumberToString(payload.battlesWon),
       incomePerSecond: parseCompactNumberToString(payload.incomePerSecond),
-      bestCard: parseCompactNumberToString(payload.bestCard)
+      bestCard: parseCompactNumberToString(payload.bestCard),
+      totalCardLevel: parseCompactNumberToString(payload.totalCardLevel)
     });
 
     return { parsed, rawText };

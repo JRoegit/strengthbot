@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { StoredSubmission } from "./types.js";
 
-type SortableSubmissionField = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard";
+type SortableSubmissionField = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
 
 type DatabaseShape = {
   submissions: StoredSubmission[];
@@ -29,7 +29,13 @@ export class SubmissionStore {
 
   private read(): DatabaseShape {
     const raw = fs.readFileSync(this.filePath, "utf8");
-    return JSON.parse(raw) as DatabaseShape;
+    const data = JSON.parse(raw) as DatabaseShape;
+    return {
+      submissions: data.submissions.map((submission) => ({
+        ...submission,
+        totalCardLevel: submission.totalCardLevel ?? "0"
+      }))
+    };
   }
 
   private write(data: DatabaseShape): void {
@@ -88,6 +94,19 @@ export class SubmissionStore {
     }
 
     data.submissions = data.submissions.filter((entry) => entry.userId !== userId);
+    this.write(data);
+    return submission;
+  }
+
+  removeByMessageId(messageId: string): StoredSubmission | null {
+    const data = this.read();
+    const submission = data.submissions.find((entry) => entry.messageId === messageId) ?? null;
+
+    if (!submission) {
+      return null;
+    }
+
+    data.submissions = data.submissions.filter((entry) => entry.messageId !== messageId);
     this.write(data);
     return submission;
   }

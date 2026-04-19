@@ -23,7 +23,13 @@ export class PenaltyStore {
 
   private read(): PenaltyDatabaseShape {
     const raw = fs.readFileSync(this.filePath, "utf8");
-    return JSON.parse(raw) as PenaltyDatabaseShape;
+    const data = JSON.parse(raw) as PenaltyDatabaseShape;
+    return {
+      penalties: data.penalties.map((penalty) => ({
+        ...penalty,
+        totalCardLevel: penalty.totalCardLevel ?? "0"
+      }))
+    };
   }
 
   private write(data: PenaltyDatabaseShape): void {
