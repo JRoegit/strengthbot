@@ -289,6 +289,7 @@ function buildHelpReply(): string {
     lines.push("🧹 **.remove <playerId>** — Dev-only removal of a stored player entry");
     lines.push("⚖️ **.penalize <playerId> <packs> <battles> <cash> <card>** — Dev-only deductions applied on future submissions");
     lines.push("🖼️ **.submission <playerId|username>** — Dev-only lookup of the stored submission image");
+    lines.push("🗑️ **.purge** — Dev-only cleanup of submissions whose stored image no longer exists");
   }
 
   return lines.join("\n");
@@ -452,6 +453,64 @@ function findSubmissionByLookup(lookup: string): StoredSubmission | null {
   }
 
   return store.getLatestByUsername(trimmedLookup);
+}
+
+async function imageStillExists(imageUrl: string): Promise<boolean> {
+  try {
+    const headResponse = await fetch(imageUrl, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000)
+    });
+
+    if (headResponse.ok) {
+      return true;
+    }
+
+    if (headResponse.status !== 405) {
+      return false;
+    }
+  } catch {
+    // Fall through to a GET request in case HEAD is unsupported or blocked.
+  }
+
+  try {
+    const getResponse = await fetch(imageUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000)
+    });
+
+    return getResponse.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function runPurgeSubmissions(): Promise<string> {
+  const submissions = store.list();
+  let checkedCount = 0;
+  let removedCount = 0;
+
+  for (const submission of submissions) {
+    checkedCount += 1;
+
+    const exists = await imageStillExists(submission.imageUrl);
+    if (exists) {
+      continue;
+    }
+
+    store.removeByUserId(submission.userId);
+    removedCount += 1;
+  }
+
+  return [
+    "## Purge Complete",
+    "",
+    `🧾 **Submissions checked:** ${checkedCount}`,
+    `🗑️ **Removed submissions:** ${removedCount}`,
+    `✅ **Remaining submissions:** ${checkedCount - removedCount}`
+  ].join("\n");
 }
 
 function parsePenaltyArguments(content: string): {
@@ -621,6 +680,19 @@ client.on(Events.MessageCreate, async (message) => {
         new AttachmentBuilder(submission.imageUrl)
       ]
     });
+    return;
+  }
+
+  if (message.content.trim().toLowerCase() === ".purge") {
+    const permissionResult = runDevCommandPreflight(message, ".purge");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    await message.reply("🧹 Checking stored submission images. This may take a little while...");
+    const result = await runPurgeSubmissions();
+    await message.reply(result);
     return;
   }
 
