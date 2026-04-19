@@ -462,6 +462,7 @@ function parsePenaltyArguments(content: string): {
   battlesWon: string;
   incomePerSecond: string;
   bestCard: string;
+  totalCardLevel: string;
 } {
   const [, userId = "", packs = "", battles = "", cash = "", card = ""] = content.trim().split(/\s+/);
 
