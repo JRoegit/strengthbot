@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { buildPreparedImageSet } from "./imagePreprocessor.js";
 import { parseCompactNumberToString } from "./numberUtils.js";
 import type { ParsedSubmission } from "./types.js";
 
@@ -48,8 +47,6 @@ export class VisionParser {
   }
 
   async parseImage(imageUrl: string): Promise<{ parsed: ParsedSubmission; rawText: string }> {
-    const preparedImages = await buildPreparedImageSet(imageUrl);
-
     const response = await this.client.responses.create({
       model: this.model,
       input: [
@@ -60,12 +57,12 @@ export class VisionParser {
               type: "input_text",
               text: [
                 "You extract leaderboard submission stats from a game screenshot.",
-                "You will be given one full panel crop plus separate focused crops for the username and each stat row.",
-                "Treat the focused row crops as the primary source of truth.",
-                "Use the full panel crop only as fallback context if one row crop is ambiguous.",
-                "At the top center is the username.",
-                "Each stat row shows a label on the left and a value on the right on the same horizontal line.",
-                "Extract the values as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel.",
+                "Only use the blue stats menu box in the screenshot.",
+                "Ignore all other scoreboards, overlays, HUD elements, captions, and background text outside that blue box.",
+                "Inside the blue box, the top centered line is the username.",
+                "Below the username are labeled rows, and each value is right-aligned on the same horizontal line as its label.",
+                "Read the value on the same row as each label and do not read any nearby text from other rows.",
+                "Extract the five values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel.",
                 "If totalCardLevel is not present in the screenshot, return 0 for totalCardLevel.",
                 "Labels may be in English, German, Italian, or another localized language.",
                 "Transcribe each value exactly as shown before any normalization.",
@@ -87,68 +84,13 @@ export class VisionParser {
             {
               type: "input_text",
               text: [
-                "Read the provided crops and extract the username and all stat values.",
-                "Prefer the focused row images over the panel image whenever possible.",
+                "Extract the username and the stat values from the blue stats box only.",
                 "For each stat, read the right-aligned value on the same row as the label."
               ].join(" ")
             },
             {
               type: "input_image",
-              image_url: preparedImages.panel,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Username crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.username,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Packs Opened row crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.packsOpenedRow,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Battles Won row crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.battlesWonRow,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Cash/s row crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.incomePerSecondRow,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Best Card row crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.bestCardRow,
-              detail: "high"
-            },
-            {
-              type: "input_text",
-              text: "Total Card Level row crop"
-            },
-            {
-              type: "input_image",
-              image_url: preparedImages.totalCardLevelRow,
+              image_url: imageUrl,
               detail: "high"
             }
           ]
