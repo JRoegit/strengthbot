@@ -60,10 +60,19 @@ export class VisionParser {
                 "Only use the blue stats menu box in the screenshot.",
                 "Ignore all other scoreboards, overlays, HUD elements, captions, and background text outside that blue box.",
                 "Inside the blue box, the top centered line is the username.",
-                "Then extract the five values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel",
+                "Below the username are labeled rows, and each value is right-aligned on the same horizontal line as its label.",
+                "Read the value on the same row as each label and do not read any nearby text from other rows.",
+                "Extract the five values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel.",
+                "If totalCardLevel is not present in the screenshot, return 0 for totalCardLevel.",
                 "Labels may be in English, German, Italian, or another localized language.",
+                "Transcribe each value exactly as shown before any normalization.",
+                "Do not simplify, round, infer, or convert values.",
+                "If the screenshot shows 1.23K, return 1.23K, not 1230 and not 230.",
+                "If the screenshot shows 1.23K/s, return 1.23K/s exactly, including the decimal point, suffix, and /s.",
+                "If the screenshot shows 0, return 0.",
                 "Return each numeric field exactly as it appears, preserving suffixes like K, M, B, T, Qa, Qt and decorations like $ or /s if present.",
                 "The image may be blurry, discolored, skewed, cropped, or photographed from a screen.",
+                "Double-check decimal points and suffix letters carefully before responding.",
                 "If a character is slightly ambiguous, choose the most likely reading from the blue box only."
               ].join(" ")
             }
@@ -76,7 +85,8 @@ export class VisionParser {
               type: "input_text",
               text: [
                 "Extract the username and the stat values from the blue stats box only.",
-                "Do not read values from any leaderboard or overlay outside the blue box."
+                "Do not read values from any leaderboard or overlay outside the blue box.",
+                "For each stat, read the right-aligned value on the same row as the label."
               ].join(" ")
             },
             {
