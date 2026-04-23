@@ -14,9 +14,10 @@ import { parseCompactNumberToString, subtractClamped } from "./numberUtils.js";
 import { PenaltyStore } from "./penaltyStore.js";
 import { VisionParser } from "./openaiParser.js";
 import { SubmissionStore } from "./storage.js";
+import type { SortableSubmissionField } from "./storage.js";
 import type { PenaltyProfile, StoredSubmission } from "./types.js";
 
-type LeaderboardCategory = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
+type LeaderboardCategory = SortableSubmissionField;
 
 type OpenAiLikeError = {
   status?: number;
@@ -179,6 +180,32 @@ function parseTopCategory(value: string): LeaderboardCategory | null {
   return null;
 }
 
+function parseSettableStatName(value: string): SortableSubmissionField | null {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "packs" || normalized === "pack" || normalized === "packsopened") {
+    return "packsOpened";
+  }
+
+  if (normalized === "battles" || normalized === "battle" || normalized === "battleswon") {
+    return "battlesWon";
+  }
+
+  if (normalized === "cash" || normalized === "income" || normalized === "incomepersecond" || normalized === "cashpersecond") {
+    return "incomePerSecond";
+  }
+
+  if (normalized === "card" || normalized === "bestcard") {
+    return "bestCard";
+  }
+
+  if (normalized === "cardlevel" || normalized === "totalcardlevel" || normalized === "level") {
+    return "totalCardLevel";
+  }
+
+  return null;
+}
+
 function getCategoryLabel(category: LeaderboardCategory): string {
   switch (category) {
     case "packsOpened":
@@ -290,6 +317,10 @@ function buildHelpReply(): string {
     lines.push("⚖️ **.penalize <playerId> <packs> <battles> <cash> <card>** — Dev-only deductions applied on future submissions");
     lines.push("🖼️ **.submission <playerId|username>** — Dev-only lookup of the stored submission image");
     lines.push("🗑️ **.purge** — Dev-only cleanup of submissions whose stored image no longer exists");
+  }
+
+  if (config.devRoleId) {
+    lines.push("📝 **.set <playerId> <statname> <quantity>** — Dev-only override of one stored stat");
   }
 
   return lines.join("\n");
@@ -439,6 +470,10 @@ function runDevCommandPreflight(commandMessage: Message, commandName: string): s
 
 function buildPenalizeUsageReply(): string {
   return "ℹ️ Use `.penalize <playerId> <packs> <battles> <cash> <card>`.";
+}
+
+function buildSetUsageReply(): string {
+  return "\u2139\uFE0F Use `.set <playerId> <statname> <quantity>`. Stat names: `packs`, `battles`, `cash`, `card`, `cardlevel`.";
 }
 
 function findSubmissionByLookup(lookup: string): StoredSubmission | null {
@@ -730,6 +765,54 @@ client.on(Events.MessageCreate, async (message) => {
 
     await message.reply(`🧹 Removed stored entry for **${removedSubmission.username}** (${removedSubmission.userId}).`);
     return;
+  }
+
+  if (message.content.trim().toLowerCase().startsWith(".set")) {
+    const permissionResult = runDevCommandPreflight(message, ".set");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const [, playerId = "", statName = "", quantity = ""] = message.content.trim().split(/\s+/, 4);
+    if (!playerId || !statName || !quantity) {
+      await message.reply(buildSetUsageReply());
+      return;
+    }
+
+    const category = parseSettableStatName(statName);
+    if (!category) {
+      await message.reply(buildSetUsageReply());
+      return;
+    }
+
+    try {
+      const normalizedQuantity = parseCompactNumberToString(quantity);
+      const updatedSubmission = store.updateStatByUserId(playerId, category, normalizedQuantity);
+
+      if (!updatedSubmission) {
+        await message.reply(`No stored entry was found for player ID **${playerId}**.`);
+        return;
+      }
+
+      await message.reply([
+        "\u{1F4DD} **Stat updated**",
+        "",
+        `**Username:** ${updatedSubmission.username}`,
+        `**Player ID:** ${updatedSubmission.userId}`,
+        `**${getCategoryLabel(category)}:** ${formatLeaderboardValue(category, updatedSubmission[category])}`
+      ].join("\n"));
+      return;
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes("Could not parse numeric value") || error.message.includes("Unsupported numeric value"))) {
+        await message.reply(`${buildSetUsageReply()} Quantities can use suffixes like \`1.23K\`, \`4M\`, or \`2Qa\`.`);
+        return;
+      }
+
+      console.error("Failed to set stored stat", error);
+      await message.reply("\u26A0\uFE0F I couldn't update that stored stat. Please try again.");
+      return;
+    }
   }
 
   if (message.content.trim().toLowerCase().startsWith(".top")) {

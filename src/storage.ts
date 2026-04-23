@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { StoredSubmission } from "./types.js";
 
-type SortableSubmissionField = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
+export type SortableSubmissionField = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
 
 type DatabaseShape = {
   submissions: StoredSubmission[];
@@ -109,6 +109,24 @@ export class SubmissionStore {
     data.submissions = data.submissions.filter((entry) => entry.messageId !== messageId);
     this.write(data);
     return submission;
+  }
+
+  updateStatByUserId(userId: string, category: SortableSubmissionField, value: string): StoredSubmission | null {
+    const data = this.read();
+    const submissionIndex = data.submissions.findIndex((entry) => entry.userId === userId);
+
+    if (submissionIndex === -1) {
+      return null;
+    }
+
+    const updatedSubmission: StoredSubmission = {
+      ...data.submissions[submissionIndex],
+      [category]: value
+    };
+
+    data.submissions[submissionIndex] = updatedSubmission;
+    this.write(data);
+    return updatedSubmission;
   }
 
   getTopByCategory(category: SortableSubmissionField, limit: number): StoredSubmission[] {
