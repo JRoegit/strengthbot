@@ -64,6 +64,7 @@ async function handleInviteSpam(message: Message): Promise<boolean> {
 
   try {
     await message.guild.members.ban(message.author.id, {
+      deleteMessageSeconds: 7 * 24 * 60 * 60,
       reason: `Posted a Discord invite link in #${message.channelId}`
     });
     console.log(`Banned ${message.author.tag} (${message.author.id}) for posting a Discord invite link in ${message.channelId}.`);
