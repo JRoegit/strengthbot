@@ -31,6 +31,8 @@ type OpenAiLikeError = {
   };
 };
 
+const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?(?:discord(?:app)?\.com\/invite|discord\.gg)\/[a-z0-9-]+/i;
+
 function isImageAttachment(attachment: Attachment): boolean {
   return attachment.contentType?.startsWith("image/")
     || /\.(png|jpe?g|webp|bmp)$/i.test(attachment.name ?? "");
@@ -39,6 +41,37 @@ function isImageAttachment(attachment: Attachment): boolean {
 async function extractFirstImage(message: Message): Promise<Attachment | null> {
   const imageAttachment = message.attachments.find((attachment) => isImageAttachment(attachment));
   return imageAttachment ?? null;
+}
+
+function containsDiscordInvite(content: string): boolean {
+  return DISCORD_INVITE_PATTERN.test(content);
+}
+
+async function handleInviteSpam(message: Message): Promise<boolean> {
+  if (!message.inGuild()) {
+    return false;
+  }
+
+  if (!containsDiscordInvite(message.content)) {
+    return false;
+  }
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.error(`Failed to delete invite spam message ${message.id}`, error);
+  }
+
+  try {
+    await message.guild.members.ban(message.author.id, {
+      reason: `Posted a Discord invite link in #${message.channelId}`
+    });
+    console.log(`Banned ${message.author.tag} (${message.author.id}) for posting a Discord invite link in ${message.channelId}.`);
+  } catch (error) {
+    console.error(`Failed to ban ${message.author.tag} (${message.author.id}) for invite spam`, error);
+  }
+
+  return true;
 }
 
 function isInsufficientQuotaError(error: unknown): error is OpenAiLikeError {
@@ -608,6 +641,10 @@ client.on(Events.MessageDelete, async (message) => {
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) {
+    return;
+  }
+
+  if (await handleInviteSpam(message)) {
     return;
   }
 
