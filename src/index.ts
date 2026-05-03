@@ -9,6 +9,7 @@ import {
   Message,
   Partials
 } from "discord.js";
+import { BlacklistStore } from "./blacklistStore.js";
 import { config } from "./config.js";
 import { parseCompactNumberToString, subtractClamped } from "./numberUtils.js";
 import { PenaltyStore } from "./penaltyStore.js";
@@ -357,6 +358,10 @@ function buildHelpReply(): string {
     lines.push("📝 **.set <playerId> <statname> <quantity>** — Dev-only override of one stored stat");
   }
 
+  if (config.devRoleId) {
+    lines.push("\u{1F6AB} **.blacklist <playerId>** — Dev-only removal plus future submission blocking");
+  }
+
   return lines.join("\n");
 }
 
@@ -413,6 +418,7 @@ async function runBacklog(commandMessage: Message): Promise<string> {
   let scannedMessages = 0;
   let storedCount = 0;
   let skippedExistingCount = 0;
+  let skippedBlacklistedCount = 0;
   let failedCount = 0;
 
   while (true) {
@@ -437,6 +443,11 @@ async function runBacklog(commandMessage: Message): Promise<string> {
 
       if (existingUserIds.has(historyMessage.author.id)) {
         skippedExistingCount += 1;
+        continue;
+      }
+
+      if (blacklistStore.hasUserId(historyMessage.author.id)) {
+        skippedBlacklistedCount += 1;
         continue;
       }
 
@@ -620,6 +631,7 @@ const client = new Client({
 
 const store = new SubmissionStore(config.dataFile);
 const penaltyStore = new PenaltyStore(config.penaltyFile);
+const blacklistStore = new BlacklistStore(config.blacklistFile);
 const parser = new VisionParser(config.openAiApiKey, config.openAiModel);
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -782,6 +794,45 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (message.content.trim().toLowerCase().startsWith(".blacklist")) {
+    const permissionResult = runDevCommandPreflight(message, ".blacklist");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const [, playerId = ""] = message.content.trim().split(/\s+/, 2);
+    if (!playerId) {
+      await message.reply("ℹ️ Use `.blacklist <playerId>` to remove a stored entry and ignore future submissions from that Discord user.");
+      return;
+    }
+
+    const removedSubmission = store.removeByUserId(playerId);
+    blacklistStore.add({
+      userId: playerId,
+      blacklistedAt: new Date().toISOString()
+    });
+
+    if (!removedSubmission) {
+      await message.reply([
+        "🚫 **User blacklisted**",
+        "",
+        `**Player ID:** ${playerId}`,
+        "There was no current stored submission to remove, but future submissions from this user will now be ignored."
+      ].join("\n"));
+      return;
+    }
+
+    await message.reply([
+      "🚫 **User blacklisted**",
+      "",
+      `**Username:** ${removedSubmission.username}`,
+      `**Player ID:** ${removedSubmission.userId}`,
+      "Their stored submission was removed and future submissions from this user will now be ignored."
+    ].join("\n"));
+    return;
+  }
+
   if (message.content.trim().toLowerCase().startsWith(".remove")) {
     const permissionResult = runDevCommandPreflight(message, ".remove");
     if (permissionResult) {
@@ -867,6 +918,10 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   if (message.channelId !== config.discordChannelId) {
+    return;
+  }
+
+  if (blacklistStore.hasUserId(message.author.id)) {
     return;
   }
 

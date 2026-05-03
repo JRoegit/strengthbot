@@ -27,3 +27,8 @@ export type PenaltyProfile = {
   totalCardLevel: string;
   updatedAt: string;
 };
+
+export type BlacklistEntry = {
+  userId: string;
+  blacklistedAt: string;
+};

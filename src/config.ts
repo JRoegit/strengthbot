@@ -19,5 +19,6 @@ export const config = {
   openAiModel: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
   dataFile: path.resolve(process.env.DATA_FILE?.trim() || "./data/submissions.json"),
   penaltyFile: path.resolve(process.env.PENALTY_FILE?.trim() || "./data/penalties.json"),
+  blacklistFile: path.resolve(process.env.BLACKLIST_FILE?.trim() || "./data/blacklist.json"),
   devRoleId: process.env.DEV_ROLE_ID?.trim() || ""
 };
