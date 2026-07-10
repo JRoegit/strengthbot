@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { parseCompactNumberToString } from "./numberUtils.js";
+import { parseCompactNumberToString, parseDurationToSecondsString } from "./numberUtils.js";
 import type { ParsedSubmission } from "./types.js";
 
 const OUTPUT_SCHEMA = {
@@ -7,19 +7,17 @@ const OUTPUT_SCHEMA = {
   additionalProperties: false,
   required: [
     "username",
-    "packsOpened",
-    "battlesWon",
-    "incomePerSecond",
-    "bestCard",
-    "totalCardLevel"
+    "highestStrength",
+    "highestWins",
+    "rebirths",
+    "timePlayed"
   ],
   properties: {
     username: { type: "string" },
-    packsOpened: { type: "string" },
-    battlesWon: { type: "string" },
-    incomePerSecond: { type: "string" },
-    bestCard: { type: "string" },
-    totalCardLevel: { type: "string" }
+    highestStrength: { type: "string" },
+    highestWins: { type: "string" },
+    rebirths: { type: "string" },
+    timePlayed: { type: "string" }
   }
 } as const;
 
@@ -57,23 +55,23 @@ export class VisionParser {
               type: "input_text",
               text: [
                 "You extract leaderboard submission stats from a game screenshot.",
-                "Only use the blue stats menu box in the screenshot.",
-                "Ignore all other scoreboards, overlays, HUD elements, captions, and background text outside that blue box.",
-                "Inside the blue box, the top centered line is the username.",
-                "Below the username are labeled rows, and each value is right-aligned on the same horizontal line as its label.",
+                "Only use the centered Lifetime Stats menu in the screenshot.",
+                "Ignore all other scoreboards, overlays, HUD elements, captions, and background text outside that stats panel.",
+                "Inside the Lifetime Stats panel, the top centered line below the header is the username.",
+                "Below the username are four labeled rows, and each value is right-aligned on the same horizontal line as its label.",
                 "Read the value on the same row as each label and do not read any nearby text from other rows.",
-                "Extract the five values shown top to bottom inside the box as packsOpened, battlesWon, incomePerSecond, bestCard, totalCardLevel.",
-                "If totalCardLevel is not present in the screenshot, return 0 for totalCardLevel.",
+                "Extract the four values shown top to bottom inside the panel as highestStrength, highestWins, rebirths, timePlayed.",
+                "The rows are Highest Strength, Highest Wins, Rebirths, and Time Played.",
                 "Labels may be in English, German, Italian, or another localized language.",
                 "Transcribe each value exactly as shown before any normalization.",
                 "Do not simplify, round, infer, or convert values.",
                 "If the screenshot shows 1.23K, return 1.23K, not 1230 and not 230.",
-                "If the screenshot shows 1.23K/s, return 1.23K/s exactly, including the decimal point, suffix, and /s.",
+                "If the screenshot shows 15m30s, return 15m30s exactly.",
                 "If the screenshot shows 0, return 0.",
-                "Return each numeric field exactly as it appears, preserving suffixes like K, M, B, T, Qa, Qt and decorations like $ or /s if present.",
+                "Return each numeric field exactly as it appears, preserving suffixes like K, M, B, T, Qa, and Qt.",
                 "The image may be blurry, discolored, skewed, cropped, or photographed from a screen.",
                 "Double-check decimal points and suffix letters carefully before responding.",
-                "If a character is slightly ambiguous, choose the most likely reading from the blue box only."
+                "If a character is slightly ambiguous, choose the most likely reading from the Lifetime Stats panel only."
               ].join(" ")
             }
           ]
@@ -84,7 +82,7 @@ export class VisionParser {
             {
               type: "input_text",
               text: [
-                "Extract the username and the stat values from the blue stats box only.",
+                "Extract the username and the stat values from the Lifetime Stats panel only.",
                 "For each stat, read the right-aligned value on the same row as the label."
               ].join(" ")
             },
@@ -115,11 +113,10 @@ export class VisionParser {
     const payload = JSON.parse(rawText) as Record<string, string>;
     const parsed: ParsedSubmission = validateParsedSubmission({
       username: sanitizeUsername(payload.username),
-      packsOpened: parseCompactNumberToString(payload.packsOpened),
-      battlesWon: parseCompactNumberToString(payload.battlesWon),
-      incomePerSecond: parseCompactNumberToString(payload.incomePerSecond),
-      bestCard: parseCompactNumberToString(payload.bestCard),
-      totalCardLevel: parseCompactNumberToString(payload.totalCardLevel)
+      highestStrength: parseCompactNumberToString(payload.highestStrength),
+      highestWins: parseCompactNumberToString(payload.highestWins),
+      rebirths: parseCompactNumberToString(payload.rebirths),
+      timePlayed: parseDurationToSecondsString(payload.timePlayed)
     });
 
     return { parsed, rawText };

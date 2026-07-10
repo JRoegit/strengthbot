@@ -27,7 +27,10 @@ export class PenaltyStore {
     return {
       penalties: data.penalties.map((penalty) => ({
         ...penalty,
-        totalCardLevel: penalty.totalCardLevel ?? "0"
+        highestStrength: penalty.highestStrength ?? "0",
+        highestWins: penalty.highestWins ?? "0",
+        rebirths: penalty.rebirths ?? "0",
+        timePlayed: penalty.timePlayed ?? "0"
       }))
     };
   }

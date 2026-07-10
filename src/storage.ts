@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { StoredSubmission } from "./types.js";
 
-export type SortableSubmissionField = "packsOpened" | "battlesWon" | "incomePerSecond" | "bestCard" | "totalCardLevel";
+export type SortableSubmissionField = "highestStrength" | "highestWins" | "rebirths" | "timePlayed";
 
 type DatabaseShape = {
   submissions: StoredSubmission[];
@@ -33,7 +33,10 @@ export class SubmissionStore {
     return {
       submissions: data.submissions.map((submission) => ({
         ...submission,
-        totalCardLevel: submission.totalCardLevel ?? "0"
+        highestStrength: submission.highestStrength ?? "0",
+        highestWins: submission.highestWins ?? "0",
+        rebirths: submission.rebirths ?? "0",
+        timePlayed: submission.timePlayed ?? "0"
       }))
     };
   }

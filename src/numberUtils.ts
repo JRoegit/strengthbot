@@ -43,6 +43,68 @@ export function parseCompactNumberToString(value: string): string {
   return result.toString();
 }
 
+export function parseDurationToSecondsString(value: string): string {
+  const cleaned = value.replace(/\s+/g, "").trim().toLowerCase();
+  if (!cleaned) {
+    throw new Error(`Could not parse duration value: "${value}"`);
+  }
+
+  if (/^\d+$/.test(cleaned)) {
+    return BigInt(cleaned).toString();
+  }
+
+  const colonParts = cleaned.split(":");
+  if (colonParts.length > 1) {
+    if (colonParts.some((part) => !/^\d+$/.test(part))) {
+      throw new Error(`Could not parse duration value: "${value}"`);
+    }
+
+    const parts = colonParts.map((part) => BigInt(part));
+    if (parts.length === 2) {
+      return ((parts[0] * 60n) + parts[1]).toString();
+    }
+
+    if (parts.length === 3) {
+      return ((parts[0] * 3600n) + (parts[1] * 60n) + parts[2]).toString();
+    }
+
+    throw new Error(`Could not parse duration value: "${value}"`);
+  }
+
+  let total = 0n;
+  let matched = false;
+  let consumedCharacters = 0;
+  const durationPattern = /(\d+)(days|day|d|hours|hour|hrs|hr|h|minutes|minute|mins|min|m|seconds|second|secs|sec|s)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = durationPattern.exec(cleaned)) !== null) {
+    if (match.index !== consumedCharacters) {
+      throw new Error(`Could not parse duration value: "${value}"`);
+    }
+
+    matched = true;
+    consumedCharacters = durationPattern.lastIndex;
+    const amount = BigInt(match[1]);
+    const unit = match[2];
+
+    if (unit.startsWith("d")) {
+      total += amount * 86_400n;
+    } else if (unit.startsWith("h")) {
+      total += amount * 3_600n;
+    } else if (unit.startsWith("m")) {
+      total += amount * 60n;
+    } else {
+      total += amount;
+    }
+  }
+
+  if (!matched || consumedCharacters !== cleaned.length) {
+    throw new Error(`Could not parse duration value: "${value}"`);
+  }
+
+  return total.toString();
+}
+
 export function subtractClamped(value: string, deduction: string): string {
   const result = BigInt(value) - BigInt(deduction);
   return (result < 0n ? 0n : result).toString();

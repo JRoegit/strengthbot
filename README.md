@@ -1,6 +1,6 @@
 # Skarot Discord Bot
 
-A Discord bot starter that watches one channel, sends uploaded screenshots to OpenAI vision, normalizes compact numbers like `1.23K`, and stores parsed submissions locally.
+A Discord bot starter that watches one channel, sends uploaded screenshots to OpenAI vision, normalizes compact numbers like `13.2K`, and stores parsed player stat submissions locally.
 
 ## What it does
 
@@ -9,16 +9,17 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 - Sends the image to OpenAI vision for extraction
 - Parses these fields:
   - `username`
-  - `packsOpened`
-  - `battlesWon`
-  - `incomePerSecond`
-  - `bestCard`
+  - `highestStrength`
+  - `highestWins`
+  - `rebirths`
+  - `timePlayed`
 - Converts values like `1.23K`, `4.5M`, and `2B` into full integers
+- Converts time values like `15m30s`, `2h`, or `1:30:00` into stored seconds
 - Saves submissions to `data/submissions.json`
 - Stores penalties separately in `data/penalties.json`
 - Supports a `.me` command to show a user's latest stored stats
-- Supports `.top packs`, `.top battles`, `.top cash`, and `.top card` for top 10 lists
-- Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <packs> <battles> <cash> <card>` commands
+- Supports `.top strength`, `.top wins`, `.top rebirths`, and `.top time` for top 10 lists
+- Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <strength> <wins> <rebirths> <time>` commands
 
 ## Setup
 
@@ -50,7 +51,7 @@ npm run dev
 
 - The current version stores data in a local JSON file so it is easy to inspect during development.
 - The bot reacts with `:white_check_mark:` after a successful save and `:warning:` if parsing fails.
-- The OpenAI prompt is intentionally narrow so output stays cheap and structured.
+- The OpenAI prompt is intentionally narrow around the centered Lifetime Stats panel so output stays cheap and structured.
 
 ## Suggested next steps
 

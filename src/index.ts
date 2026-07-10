@@ -11,7 +11,7 @@ import {
 } from "discord.js";
 import { BlacklistStore } from "./blacklistStore.js";
 import { config } from "./config.js";
-import { parseCompactNumberToString, subtractClamped } from "./numberUtils.js";
+import { parseCompactNumberToString, parseDurationToSecondsString, subtractClamped } from "./numberUtils.js";
 import { PenaltyStore } from "./penaltyStore.js";
 import { VisionParser } from "./openaiParser.js";
 import { SubmissionStore } from "./storage.js";
@@ -103,6 +103,7 @@ function isReadableParserError(error: unknown): error is Error {
   }
 
   return error.message.includes("Could not parse numeric value")
+    || error.message.includes("Could not parse duration value")
     || error.message.includes("Unsupported numeric value")
     || error.message.includes("Parsed username was empty")
     || error.message.includes("Parsed submission contained an empty field")
@@ -158,11 +159,10 @@ function formatStoredStatsMessage(): string {
     "## Your Stats",
     "",
     "👤 **Username:** {username}",
-    "📦 **Packs Opened:** {packsOpened} {packsRank}",
-    "⚔️ **Battles Won:** {battlesWon} {battlesRank}",
-    "💸 **Cash/s:** {incomePerSecond} {cashRank}",
-    "🃏 **Best Card:** {bestCard} {cardRank}",
-    "📚 **Total Card Level:** {totalCardLevel} {cardLevelRank}"
+    "💪 **Highest Strength:** {highestStrength} {strengthRank}",
+    "🏆 **Highest Wins:** {highestWins} {winsRank}",
+    "🔄 **Rebirths:** {rebirths} {rebirthsRank}",
+    "⏱️ **Time Played:** {timePlayed} {timeRank}"
   ].join("\n");
 }
 
@@ -177,39 +177,33 @@ function formatRank(rank: number | null): string {
 function buildMeReply(submission: StoredSubmission): string {
   return formatStoredStatsMessage()
     .replace("{username}", submission.username)
-    .replace("{packsOpened}", formatLeaderboardValue("packsOpened", submission.packsOpened))
-    .replace("{packsRank}", formatRank(store.getRankByUserId(submission.userId, "packsOpened")))
-    .replace("{battlesWon}", formatLeaderboardValue("battlesWon", submission.battlesWon))
-    .replace("{battlesRank}", formatRank(store.getRankByUserId(submission.userId, "battlesWon")))
-    .replace("{incomePerSecond}", formatLeaderboardValue("incomePerSecond", submission.incomePerSecond))
-    .replace("{cashRank}", formatRank(store.getRankByUserId(submission.userId, "incomePerSecond")))
-    .replace("{bestCard}", formatLeaderboardValue("bestCard", submission.bestCard))
-    .replace("{cardRank}", formatRank(store.getRankByUserId(submission.userId, "bestCard")))
-    .replace("{totalCardLevel}", formatLeaderboardValue("totalCardLevel", submission.totalCardLevel))
-    .replace("{cardLevelRank}", formatRank(store.getRankByUserId(submission.userId, "totalCardLevel")));
+    .replace("{highestStrength}", formatLeaderboardValue("highestStrength", submission.highestStrength))
+    .replace("{strengthRank}", formatRank(store.getRankByUserId(submission.userId, "highestStrength")))
+    .replace("{highestWins}", formatLeaderboardValue("highestWins", submission.highestWins))
+    .replace("{winsRank}", formatRank(store.getRankByUserId(submission.userId, "highestWins")))
+    .replace("{rebirths}", formatLeaderboardValue("rebirths", submission.rebirths))
+    .replace("{rebirthsRank}", formatRank(store.getRankByUserId(submission.userId, "rebirths")))
+    .replace("{timePlayed}", formatLeaderboardValue("timePlayed", submission.timePlayed))
+    .replace("{timeRank}", formatRank(store.getRankByUserId(submission.userId, "timePlayed")));
 }
 
 function parseTopCategory(value: string): LeaderboardCategory | null {
   const normalized = value.trim().toLowerCase();
 
-  if (normalized === "packs" || normalized === "pack" || normalized === "packsopened") {
-    return "packsOpened";
+  if (normalized === "strength" || normalized === "higheststrength") {
+    return "highestStrength";
   }
 
-  if (normalized === "battles" || normalized === "battle" || normalized === "battleswon") {
-    return "battlesWon";
+  if (normalized === "wins" || normalized === "win" || normalized === "highestwins") {
+    return "highestWins";
   }
 
-  if (normalized === "cash" || normalized === "income" || normalized === "incomepersecond") {
-    return "incomePerSecond";
+  if (normalized === "rebirth" || normalized === "rebirths") {
+    return "rebirths";
   }
 
-  if (normalized === "card" || normalized === "bestcard") {
-    return "bestCard";
-  }
-
-  if (normalized === "cardlevel" || normalized === "totalcardlevel" || normalized === "level") {
-    return "totalCardLevel";
+  if (normalized === "time" || normalized === "timeplayed" || normalized === "playtime") {
+    return "timePlayed";
   }
 
   return null;
@@ -218,24 +212,20 @@ function parseTopCategory(value: string): LeaderboardCategory | null {
 function parseSettableStatName(value: string): SortableSubmissionField | null {
   const normalized = value.trim().toLowerCase();
 
-  if (normalized === "packs" || normalized === "pack" || normalized === "packsopened") {
-    return "packsOpened";
+  if (normalized === "strength" || normalized === "higheststrength") {
+    return "highestStrength";
   }
 
-  if (normalized === "battles" || normalized === "battle" || normalized === "battleswon") {
-    return "battlesWon";
+  if (normalized === "wins" || normalized === "win" || normalized === "highestwins") {
+    return "highestWins";
   }
 
-  if (normalized === "cash" || normalized === "income" || normalized === "incomepersecond" || normalized === "cashpersecond") {
-    return "incomePerSecond";
+  if (normalized === "rebirth" || normalized === "rebirths") {
+    return "rebirths";
   }
 
-  if (normalized === "card" || normalized === "bestcard") {
-    return "bestCard";
-  }
-
-  if (normalized === "cardlevel" || normalized === "totalcardlevel" || normalized === "level") {
-    return "totalCardLevel";
+  if (normalized === "time" || normalized === "timeplayed" || normalized === "playtime") {
+    return "timePlayed";
   }
 
   return null;
@@ -243,16 +233,14 @@ function parseSettableStatName(value: string): SortableSubmissionField | null {
 
 function getCategoryLabel(category: LeaderboardCategory): string {
   switch (category) {
-    case "packsOpened":
-      return "Packs Opened";
-    case "battlesWon":
-      return "Battles Won";
-    case "incomePerSecond":
-      return "Cash/s";
-    case "bestCard":
-      return "Best Card";
-    case "totalCardLevel":
-      return "Total Card Level";
+    case "highestStrength":
+      return "Highest Strength";
+    case "highestWins":
+      return "Highest Wins";
+    case "rebirths":
+      return "Rebirths";
+    case "timePlayed":
+      return "Time Played";
   }
 }
 
@@ -302,13 +290,35 @@ function formatCompactValue(value: string, currencyPrefix = false, perSecondSuff
   return `${sign}${prefix}${display}${suffix}`;
 }
 
-function formatLeaderboardValue(category: LeaderboardCategory, value: string): string {
-  if (category === "bestCard") {
-    return formatCompactValue(value, true, true);
+function formatDurationValue(value: string): string {
+  let remaining = BigInt(value);
+  const days = remaining / 86_400n;
+  remaining %= 86_400n;
+  const hours = remaining / 3_600n;
+  remaining %= 3_600n;
+  const minutes = remaining / 60n;
+  const seconds = remaining % 60n;
+
+  const parts: string[] = [];
+  if (days > 0n) {
+    parts.push(`${days}d`);
+  }
+  if (hours > 0n) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0n) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0n || parts.length === 0) {
+    parts.push(`${seconds}s`);
   }
 
-  if (category === "incomePerSecond") {
-    return formatCompactValue(value, false, true);
+  return parts.join(" ");
+}
+
+function formatLeaderboardValue(category: LeaderboardCategory, value: string): string {
+  if (category === "timePlayed") {
+    return formatDurationValue(value);
   }
 
   return formatCompactValue(value);
@@ -336,11 +346,10 @@ function buildHelpReply(): string {
     "❓ **.help** — Show this command list",
     "👤 **.me** — Show your currently stored stats and rankings",
     "🔎 **.user <playerId|username>** — Look up another player's stored stats",
-    "🏆 **.top packs** — Show the top 10 by packs opened",
-    "⚔️ **.top battles** — Show the top 10 by battles won",
-    "💸 **.top cash** — Show the top 10 by cash per second",
-    "🃏 **.top card** — Show the top 10 by best card",
-    "📚 **.top cardlevel** — Show the top 10 by total card level"
+    "🏆 **.top strength** — Show the top 10 by highest strength",
+    "🏆 **.top wins** — Show the top 10 by highest wins",
+    "🏆 **.top rebirths** — Show the top 10 by rebirths",
+    "🏆 **.top time** — Show the top 10 by time played"
   ];
 
   if (config.devRoleId) {
@@ -349,7 +358,7 @@ function buildHelpReply(): string {
 
   if (config.devRoleId) {
     lines.push("🧹 **.remove <playerId>** — Dev-only removal of a stored player entry");
-    lines.push("⚖️ **.penalize <playerId> <packs> <battles> <cash> <card>** — Dev-only deductions applied on future submissions");
+    lines.push("⚖️ **.penalize <playerId> <strength> <wins> <rebirths> <time>** — Dev-only deductions applied on future submissions");
     lines.push("🖼️ **.submission <playerId|username>** — Dev-only lookup of the stored submission image");
     lines.push("🗑️ **.purge** — Dev-only cleanup of submissions whose stored image no longer exists");
   }
@@ -372,12 +381,10 @@ function applyPenalty(submission: StoredSubmission, penalty: PenaltyProfile | nu
 
   return {
     ...submission,
-    packsOpened: subtractClamped(submission.packsOpened, penalty.packsOpened),
-    battlesWon: subtractClamped(submission.battlesWon, penalty.battlesWon),
-    incomePerSecond: subtractClamped(submission.incomePerSecond, penalty.incomePerSecond),
-    bestCard: subtractClamped(submission.bestCard, penalty.bestCard)
-    ,
-    totalCardLevel: subtractClamped(submission.totalCardLevel, penalty.totalCardLevel)
+    highestStrength: subtractClamped(submission.highestStrength, penalty.highestStrength),
+    highestWins: subtractClamped(submission.highestWins, penalty.highestWins),
+    rebirths: subtractClamped(submission.rebirths, penalty.rebirths),
+    timePlayed: subtractClamped(submission.timePlayed, penalty.timePlayed)
   };
 }
 
@@ -514,11 +521,11 @@ function runDevCommandPreflight(commandMessage: Message, commandName: string): s
 }
 
 function buildPenalizeUsageReply(): string {
-  return "ℹ️ Use `.penalize <playerId> <packs> <battles> <cash> <card>`.";
+  return "ℹ️ Use `.penalize <playerId> <strength> <wins> <rebirths> <time>`.";
 }
 
 function buildSetUsageReply(): string {
-  return "\u2139\uFE0F Use `.set <playerId> <statname> <quantity>`. Stat names: `packs`, `battles`, `cash`, `card`, `cardlevel`.";
+  return "\u2139\uFE0F Use `.set <playerId> <statname> <quantity>`. Stat names: `strength`, `wins`, `rebirths`, `time`.";
 }
 
 function findSubmissionByLookup(lookup: string): StoredSubmission | null {
@@ -595,25 +602,23 @@ async function runPurgeSubmissions(): Promise<string> {
 
 function parsePenaltyArguments(content: string): {
   userId: string;
-  packsOpened: string;
-  battlesWon: string;
-  incomePerSecond: string;
-  bestCard: string;
-  totalCardLevel: string;
+  highestStrength: string;
+  highestWins: string;
+  rebirths: string;
+  timePlayed: string;
 } {
-  const [, userId = "", packs = "", battles = "", cash = "", card = ""] = content.trim().split(/\s+/);
+  const [, userId = "", strength = "", wins = "", rebirths = "", time = ""] = content.trim().split(/\s+/);
 
-  if (!userId || !packs || !battles || !cash || !card) {
+  if (!userId || !strength || !wins || !rebirths || !time) {
     throw new Error("Missing penalty arguments.");
   }
 
   return {
     userId,
-    packsOpened: parseCompactNumberToString(packs),
-    battlesWon: parseCompactNumberToString(battles),
-    incomePerSecond: parseCompactNumberToString(cash),
-    bestCard: parseCompactNumberToString(card),
-    totalCardLevel: "0"
+    highestStrength: parseCompactNumberToString(strength),
+    highestWins: parseCompactNumberToString(wins),
+    rebirths: parseCompactNumberToString(rebirths),
+    timePlayed: parseDurationToSecondsString(time)
   };
 }
 
@@ -716,16 +721,15 @@ client.on(Events.MessageCreate, async (message) => {
         "",
         `**Player ID:** ${penalty.userId}`,
         "These deductions will be applied to future submissions from this Discord user.",
-        `**Packs deduction:** ${formatCompactValue(penalty.packsOpened)}`,
-        `**Battles deduction:** ${formatCompactValue(penalty.battlesWon)}`,
-        `**Cash/s deduction:** ${formatCompactValue(penalty.incomePerSecond, false, true)}`,
-        `**Best Card deduction:** ${formatCompactValue(penalty.bestCard, true, true)}`,
-        `**Total Card Level deduction:** ${formatCompactValue(penalty.totalCardLevel)}`
+        `**Highest Strength deduction:** ${formatCompactValue(penalty.highestStrength)}`,
+        `**Highest Wins deduction:** ${formatCompactValue(penalty.highestWins)}`,
+        `**Rebirths deduction:** ${formatCompactValue(penalty.rebirths)}`,
+        `**Time Played deduction:** ${formatDurationValue(penalty.timePlayed)}`
       ].join("\n"));
       return;
     } catch (error) {
-      if (error instanceof Error && (error.message.includes("Missing penalty arguments.") || error.message.includes("Could not parse numeric value") || error.message.includes("Unsupported numeric value"))) {
-        await message.reply(`${buildPenalizeUsageReply()} Numeric values can use suffixes like \`1.2K\`, \`3M\`, or \`4Qa\`.`);
+      if (error instanceof Error && (error.message.includes("Missing penalty arguments.") || error.message.includes("Could not parse numeric value") || error.message.includes("Could not parse duration value") || error.message.includes("Unsupported numeric value"))) {
+        await message.reply(`${buildPenalizeUsageReply()} Numeric values can use suffixes like \`1.2K\`, \`3M\`, or \`4Qa\`; time can use values like \`15m30s\`, \`2h\`, or \`1:30:00\`.`);
         return;
       }
 
@@ -876,7 +880,9 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     try {
-      const normalizedQuantity = parseCompactNumberToString(quantity);
+      const normalizedQuantity = category === "timePlayed"
+        ? parseDurationToSecondsString(quantity)
+        : parseCompactNumberToString(quantity);
       const updatedSubmission = store.updateStatByUserId(playerId, category, normalizedQuantity);
 
       if (!updatedSubmission) {
@@ -893,8 +899,8 @@ client.on(Events.MessageCreate, async (message) => {
       ].join("\n"));
       return;
     } catch (error) {
-      if (error instanceof Error && (error.message.includes("Could not parse numeric value") || error.message.includes("Unsupported numeric value"))) {
-        await message.reply(`${buildSetUsageReply()} Quantities can use suffixes like \`1.23K\`, \`4M\`, or \`2Qa\`.`);
+      if (error instanceof Error && (error.message.includes("Could not parse numeric value") || error.message.includes("Could not parse duration value") || error.message.includes("Unsupported numeric value"))) {
+        await message.reply(`${buildSetUsageReply()} Quantities can use suffixes like \`1.23K\`, \`4M\`, or \`2Qa\`; time can use values like \`15m30s\`, \`2h\`, or \`1:30:00\`.`);
         return;
       }
 
@@ -909,7 +915,7 @@ client.on(Events.MessageCreate, async (message) => {
     const category = parseTopCategory(categoryInput);
 
     if (!category) {
-      await message.reply("ℹ️ Use `.top packs`, `.top battles`, `.top cash`, `.top card`, or `.top cardlevel`.");
+      await message.reply("ℹ️ Use `.top strength`, `.top wins`, `.top rebirths`, or `.top time`.");
       return;
     }
 

@@ -1,10 +1,9 @@
 export type ParsedSubmission = {
   username: string;
-  packsOpened: string;
-  battlesWon: string;
-  incomePerSecond: string;
-  bestCard: string;
-  totalCardLevel: string;
+  highestStrength: string;
+  highestWins: string;
+  rebirths: string;
+  timePlayed: string;
 };
 
 export type StoredSubmission = ParsedSubmission & {
@@ -20,11 +19,10 @@ export type StoredSubmission = ParsedSubmission & {
 
 export type PenaltyProfile = {
   userId: string;
-  packsOpened: string;
-  battlesWon: string;
-  incomePerSecond: string;
-  bestCard: string;
-  totalCardLevel: string;
+  highestStrength: string;
+  highestWins: string;
+  rebirths: string;
+  timePlayed: string;
   updatedAt: string;
 };
 
