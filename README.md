@@ -6,6 +6,7 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 
 - Monitors one configured Discord channel
 - Looks for the first image attachment on each message
+- Restricts bot commands to configured command channels
 - Sends the image to OpenAI vision for extraction
 - Parses these fields:
   - `username`
@@ -31,7 +32,8 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 2. Copy `.env.example` to `.env`
 3. Fill in:
    - `DISCORD_TOKEN`
-   - `DISCORD_CHANNEL_ID`
+   - `DISCORD_CHANNEL_ID` for screenshot submissions
+   - `COMMAND_CHANNEL_IDS` for command usage, as one or more comma-separated channel IDs
    - `OPENAI_API_KEY`
    - `PENALTY_FILE` if you want a custom penalty storage path
    - `DEV_ROLE_ID` for `.backlog` and other dev-only commands

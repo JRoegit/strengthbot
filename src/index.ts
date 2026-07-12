@@ -33,6 +33,8 @@ type OpenAiLikeError = {
 };
 
 const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?(?:discord(?:app)?\.com\/invite|discord\.gg)\/[a-z0-9-]+/i;
+const COMMAND_PREFIX = ".";
+const commandChannelIds = new Set(config.commandChannelIds);
 
 function isImageAttachment(attachment: Attachment): boolean {
   return attachment.contentType?.startsWith("image/")
@@ -46,6 +48,14 @@ async function extractFirstImage(message: Message): Promise<Attachment | null> {
 
 function containsDiscordInvite(content: string): boolean {
   return DISCORD_INVITE_PATTERN.test(content);
+}
+
+function isCommandMessage(content: string): boolean {
+  return content.trim().startsWith(COMMAND_PREFIX);
+}
+
+function canUseCommandsInChannel(channelId: string): boolean {
+  return commandChannelIds.has(channelId);
 }
 
 async function handleInviteSpam(message: Message): Promise<boolean> {
@@ -641,7 +651,8 @@ const parser = new VisionParser(config.openAiApiKey, config.openAiModel);
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
-  console.log(`Monitoring channel ${config.discordChannelId}`);
+  console.log(`Monitoring submission channel ${config.discordChannelId}`);
+  console.log(`Command channels: ${config.commandChannelIds.join(", ")}`);
 });
 
 client.on(Events.MessageDelete, async (message) => {
@@ -663,6 +674,11 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   if (await handleInviteSpam(message)) {
+    return;
+  }
+
+  if (isCommandMessage(message.content) && !canUseCommandsInChannel(message.channelId)) {
+    await message.reply("Commands can only be used in the configured command channel.").catch(() => undefined);
     return;
   }
 
