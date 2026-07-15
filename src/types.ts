@@ -15,6 +15,7 @@ export type StoredSubmission = ParsedSubmission & {
   submittedAt: string;
   imageUrl: string;
   rawModelOutput: string;
+  vip: boolean;
 };
 
 export type PenaltyProfile = {

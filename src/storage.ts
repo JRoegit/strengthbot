@@ -21,6 +21,7 @@ function ensureDatabaseFile(filePath: string): void {
 export class SubmissionStore {
   constructor(private readonly filePath: string) {
     ensureDatabaseFile(filePath);
+    this.migrateVipFlags();
   }
 
   private normalizeUsername(username: string): string {
@@ -36,13 +37,23 @@ export class SubmissionStore {
         highestStrength: submission.highestStrength ?? "0",
         highestWins: submission.highestWins ?? "0",
         rebirths: submission.rebirths ?? "0",
-        timePlayed: submission.timePlayed ?? "0"
+        timePlayed: submission.timePlayed ?? "0",
+        vip: submission.vip === true
       }))
     };
   }
 
   private write(data: DatabaseShape): void {
     fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf8");
+  }
+
+  private migrateVipFlags(): void {
+    const raw = fs.readFileSync(this.filePath, "utf8");
+    const data = JSON.parse(raw) as DatabaseShape;
+
+    if (data.submissions.some((submission) => typeof submission.vip !== "boolean")) {
+      this.write(this.read());
+    }
   }
 
   hasMessage(messageId: string): boolean {
@@ -125,6 +136,24 @@ export class SubmissionStore {
     const updatedSubmission: StoredSubmission = {
       ...data.submissions[submissionIndex],
       [category]: value
+    };
+
+    data.submissions[submissionIndex] = updatedSubmission;
+    this.write(data);
+    return updatedSubmission;
+  }
+
+  setVipByUserId(userId: string, vip: boolean): StoredSubmission | null {
+    const data = this.read();
+    const submissionIndex = data.submissions.findIndex((entry) => entry.userId === userId);
+
+    if (submissionIndex === -1) {
+      return null;
+    }
+
+    const updatedSubmission: StoredSubmission = {
+      ...data.submissions[submissionIndex],
+      vip
     };
 
     data.submissions[submissionIndex] = updatedSubmission;

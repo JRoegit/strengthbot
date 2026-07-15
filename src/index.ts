@@ -381,6 +381,10 @@ function buildHelpReply(): string {
     lines.push("\u{1F6AB} **.blacklist <playerId>** — Dev-only removal plus future submission blocking");
   }
 
+  if (config.devRoleId && config.vipRoleId) {
+    lines.push("\u2B50 **.vip @playername** — Dev-only VIP role and leaderboard access");
+  }
+
   return lines.join("\n");
 }
 
@@ -400,6 +404,7 @@ function applyPenalty(submission: StoredSubmission, penalty: PenaltyProfile | nu
 
 async function storeParsedSubmission(message: Message, imageUrl: string): Promise<StoredSubmission> {
   const { parsed, rawText } = await parser.parseImage(imageUrl);
+  const existingSubmission = store.getLatestByUserId(message.author.id);
 
   const submission: StoredSubmission = {
     id: randomUUID(),
@@ -410,6 +415,7 @@ async function storeParsedSubmission(message: Message, imageUrl: string): Promis
     submittedAt: message.createdAt.toISOString(),
     imageUrl,
     rawModelOutput: rawText,
+    vip: existingSubmission?.vip ?? false,
     ...parsed
   };
 
@@ -530,6 +536,19 @@ function runDevCommandPreflight(commandMessage: Message, commandName: string): s
   return null;
 }
 
+function runVipCommandPreflight(commandMessage: Message): string | null {
+  const devCommandError = runDevCommandPreflight(commandMessage, ".vip");
+  if (devCommandError) {
+    return devCommandError;
+  }
+
+  if (!config.vipRoleId) {
+    return "\u26A0\uFE0F `.vip` is not configured yet. Set `VIP_ROLE_ID` in the bot's environment.";
+  }
+
+  return null;
+}
+
 function buildPenalizeUsageReply(): string {
   return "ℹ️ Use `.penalize <playerId> <strength> <wins> <rebirths> <time>`.";
 }
@@ -591,6 +610,10 @@ async function runPurgeSubmissions(): Promise<string> {
 
   for (const submission of submissions) {
     checkedCount += 1;
+
+    if (!submission.imageUrl) {
+      continue;
+    }
 
     const exists = await imageStillExists(submission.imageUrl);
     if (exists) {
@@ -716,6 +739,72 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (/^\.vip(?:\s|$)/i.test(message.content.trim())) {
+    const permissionResult = runVipCommandPreflight(message);
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const mentionedUser = message.mentions.users.first();
+    if (!mentionedUser) {
+      await message.reply("\u2139\uFE0F Use `.vip @playername` and tag the Discord member who should receive VIP.");
+      return;
+    }
+
+    const targetMember = message.mentions.members?.get(mentionedUser.id)
+      ?? await message.guild!.members.fetch(mentionedUser.id).catch(() => null);
+    if (!targetMember) {
+      await message.reply("\u26A0\uFE0F I couldn't find that member in this server.");
+      return;
+    }
+
+    if (mentionedUser.bot) {
+      await message.reply("\u26A0\uFE0F VIP can only be given to a player, not a bot.");
+      return;
+    }
+
+    try {
+      await targetMember.roles.add(config.vipRoleId, `VIP granted by ${message.author.tag} (${message.author.id})`);
+
+      let submission = store.setVipByUserId(mentionedUser.id, true);
+      const createdSubmission = submission === null;
+
+      if (!submission) {
+        submission = {
+          id: randomUUID(),
+          messageId: `vip:${mentionedUser.id}`,
+          channelId: message.channelId,
+          guildId: message.guildId,
+          userId: mentionedUser.id,
+          submittedAt: new Date().toISOString(),
+          imageUrl: "",
+          rawModelOutput: "",
+          username: targetMember.displayName,
+          highestStrength: "0",
+          highestWins: "0",
+          rebirths: "0",
+          timePlayed: "0",
+          vip: true
+        };
+        store.insert(submission);
+      }
+
+      await message.reply([
+        "\u2B50 **VIP granted**",
+        "",
+        `**Player:** ${targetMember}`,
+        `**Leaderboard entry:** ${createdSubmission ? "Created with all stats set to 0" : "Existing submission marked as VIP"}`,
+        "The configured VIP role has been added."
+      ].join("\n"));
+      return;
+    } catch (error) {
+      console.error(`Failed to grant VIP to ${mentionedUser.tag} (${mentionedUser.id})`, error);
+      await message.reply("\u26A0\uFE0F I couldn't grant VIP. Check that the bot has Manage Roles and that its highest role is above the configured VIP role.");
+      return;
+    }
+  }
+
   if (message.content.trim().toLowerCase().startsWith(".penalize")) {
     const permissionResult = runDevCommandPreflight(message, ".penalize");
     if (permissionResult) {
@@ -771,6 +860,11 @@ client.on(Events.MessageCreate, async (message) => {
     const submission = findSubmissionByLookup(lookup);
     if (!submission) {
       await message.reply(`📭 I couldn't find a stored submission for **${lookup}**.`);
+      return;
+    }
+
+    if (!submission.imageUrl) {
+      await message.reply(`\u{1F4ED} **${submission.username}** has a leaderboard entry, but no submission image yet.`);
       return;
     }
 

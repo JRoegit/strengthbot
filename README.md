@@ -21,6 +21,7 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 - Supports a `.me` command to show a user's latest stored stats
 - Supports `.top strength`, `.top wins`, `.top rebirths`, and `.top time` for top 10 lists
 - Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <strength> <wins> <rebirths> <time>` commands
+- Supports dev-only `.vip @playername` to mark a submission as VIP and grant a configured Discord role
 
 ## Setup
 
@@ -37,16 +38,88 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
    - `OPENAI_API_KEY`
    - `PENALTY_FILE` if you want a custom penalty storage path
    - `DEV_ROLE_ID` for `.backlog` and other dev-only commands
+   - `VIP_ROLE_ID` for the role granted by `.vip @playername`
+   - The bot needs `Manage Roles`, and its highest role must be above the VIP role
 4. Install dependencies:
 
 ```bash
 npm install
 ```
 
-5. Start the bot:
+5. Start the bot for local development:
 
 ```bash
 npm run dev
+```
+
+For production, build and run the compiled bot:
+
+```bash
+npm run build
+npm start
+```
+
+## Raspberry Pi autostart
+
+Use `systemd` to run the compiled bot after the Pi restarts.
+
+1. Build the bot on the Pi:
+
+```bash
+cd /home/pi/skarobot/skarobot
+npm install
+npm run build
+```
+
+2. Create the service:
+
+```bash
+sudo nano /etc/systemd/system/strengthbot.service
+```
+
+3. Paste this service file, adjusting `User` and `WorkingDirectory` if your Pi user or project path is different:
+
+```ini
+[Unit]
+Description=Strength Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/skarobot/skarobot
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+4. Enable and start it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable strengthbot
+sudo systemctl start strengthbot
+```
+
+Useful commands:
+
+```bash
+sudo systemctl status strengthbot
+journalctl -u strengthbot -f
+sudo systemctl restart strengthbot
+```
+
+After pulling code changes on the Pi, rebuild and restart:
+
+```bash
+npm install
+npm run build
+sudo systemctl restart strengthbot
 ```
 
 ## Notes
