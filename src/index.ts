@@ -361,7 +361,7 @@ function buildLeaderboardCsv(category: LeaderboardCategory): Buffer {
   const rows = store.getTopByCategory(category, 10).map((submission) => [
     submission.vip ? "true" : "false",
     escapeCsvField(submission.username),
-    submission[category]
+    escapeCsvField(formatLeaderboardValue(category, submission[category]))
   ].join(","));
 
   return Buffer.from(["IsVIP,Name,Value", ...rows].join("\r\n"), "utf8");
