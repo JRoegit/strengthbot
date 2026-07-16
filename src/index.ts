@@ -349,6 +349,37 @@ function buildTopReply(category: LeaderboardCategory): string {
   return [`## Leaderboard`, `**Category:** ${getCategoryLabel(category)}`, "", ...lines].join("\n");
 }
 
+function escapeCsvField(value: string): string {
+  if (!/[",\r\n]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function buildLeaderboardCsv(category: LeaderboardCategory): Buffer {
+  const rows = store.getTopByCategory(category, 10).map((submission) => [
+    submission.vip ? "true" : "false",
+    escapeCsvField(submission.username),
+    submission[category]
+  ].join(","));
+
+  return Buffer.from(["IsVIP,Name,Value", ...rows].join("\r\n"), "utf8");
+}
+
+function getCategoryFileName(category: LeaderboardCategory): string {
+  switch (category) {
+    case "highestStrength":
+      return "strength";
+    case "highestWins":
+      return "wins";
+    case "rebirths":
+      return "rebirths";
+    case "timePlayed":
+      return "time";
+  }
+}
+
 function buildHelpReply(): string {
   const lines = [
     "## Bot Commands",
@@ -379,6 +410,10 @@ function buildHelpReply(): string {
 
   if (config.devRoleId) {
     lines.push("\u{1F6AB} **.blacklist <playerId>** — Dev-only removal plus future submission blocking");
+  }
+
+  if (config.devRoleId) {
+    lines.push("\u{1F4C4} **.csv <statname>** \u2014 Dev-only top 10 CSV export for one stat");
   }
 
   if (config.devRoleId && config.vipRoleId) {
@@ -1018,6 +1053,30 @@ client.on(Events.MessageCreate, async (message) => {
       await message.reply("\u26A0\uFE0F I couldn't update that stored stat. Please try again.");
       return;
     }
+  }
+
+  if (/^\.csv(?:\s|$)/i.test(message.content.trim())) {
+    const permissionResult = runDevCommandPreflight(message, ".csv");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const [, categoryInput = ""] = message.content.trim().split(/\s+/, 2);
+    const category = parseTopCategory(categoryInput);
+    if (!category) {
+      await message.reply("\u2139\uFE0F Use `.csv strength`, `.csv wins`, `.csv rebirths`, or `.csv time`.");
+      return;
+    }
+
+    await message.reply({
+      files: [
+        new AttachmentBuilder(buildLeaderboardCsv(category), {
+          name: `leaderboard-${getCategoryFileName(category)}.csv`
+        })
+      ]
+    });
+    return;
   }
 
   if (message.content.trim().toLowerCase().startsWith(".top")) {

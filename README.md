@@ -21,6 +21,7 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 - Supports a `.me` command to show a user's latest stored stats
 - Supports `.top strength`, `.top wins`, `.top rebirths`, and `.top time` for top 10 lists
 - Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <strength> <wins> <rebirths> <time>` commands
+- Supports dev-only `.csv <statname>` exports of the top 10 with `IsVIP`, `Name`, and `Value` columns
 - Supports dev-only `.vip @playername` to mark a submission as VIP and grant a configured Discord role
 
 ## Setup
