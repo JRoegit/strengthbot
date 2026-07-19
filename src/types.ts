@@ -31,3 +31,13 @@ export type BlacklistEntry = {
   userId: string;
   blacklistedAt: string;
 };
+
+export type ScheduledMessage = {
+  id: string;
+  guildId: string;
+  channelId: string;
+  content: string;
+  sendAt: number;
+  createdBy: string;
+  createdAt: string;
+};

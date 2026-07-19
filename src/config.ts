@@ -32,6 +32,7 @@ export const config = {
   dataFile: path.resolve(process.env.DATA_FILE?.trim() || "./data/submissions.json"),
   penaltyFile: path.resolve(process.env.PENALTY_FILE?.trim() || "./data/penalties.json"),
   blacklistFile: path.resolve(process.env.BLACKLIST_FILE?.trim() || "./data/blacklist.json"),
+  scheduleFile: path.resolve(process.env.SCHEDULE_FILE?.trim() || "./data/schedules.json"),
   devRoleId: process.env.DEV_ROLE_ID?.trim() || "",
   vipRoleId: process.env.VIP_ROLE_ID?.trim() || ""
 };

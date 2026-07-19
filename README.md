@@ -22,6 +22,7 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
 - Supports `.top strength`, `.top wins`, `.top rebirths`, and `.top time` for top 10 lists
 - Supports dev-only `.backlog`, `.remove <playerId>`, and `.penalize <playerId> <strength> <wins> <rebirths> <time>` commands
 - Supports dev-only `.csv <statname>` exports of the top 10 with `IsVIP`, `Name`, and display-formatted `Value` columns
+- Supports persistent dev-only scheduled messages with `.schedule <epochtime> <channelId> <message>`
 - Supports dev-only `.vip @playername` to mark a submission as VIP and grant a configured Discord role
 
 ## Setup
@@ -38,6 +39,7 @@ A Discord bot starter that watches one channel, sends uploaded screenshots to Op
    - `COMMAND_CHANNEL_IDS` for command usage, as one or more comma-separated channel IDs
    - `OPENAI_API_KEY`
    - `PENALTY_FILE` if you want a custom penalty storage path
+   - `SCHEDULE_FILE` if you want a custom scheduled-message storage path
    - `DEV_ROLE_ID` for `.backlog` and other dev-only commands
    - `VIP_ROLE_ID` for the role granted by `.vip @playername`
    - The bot needs `Manage Roles`, and its highest role must be above the VIP role
@@ -126,6 +128,7 @@ sudo systemctl restart strengthbot
 ## Notes
 
 - The current version stores data in a local JSON file so it is easy to inspect during development.
+- Scheduled-message epoch times are Unix timestamps in seconds. Pending schedules are restored after a bot restart, and overdue messages are sent when the bot comes back online.
 - The bot reacts with `:white_check_mark:` after a successful save and `:warning:` if parsing fails.
 - The OpenAI prompt is intentionally narrow around the centered Lifetime Stats panel so output stays cheap and structured.
 

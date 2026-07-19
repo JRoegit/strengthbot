@@ -13,10 +13,11 @@ import { BlacklistStore } from "./blacklistStore.js";
 import { config } from "./config.js";
 import { parseCompactNumberToString, parseDurationToSecondsString, subtractClamped } from "./numberUtils.js";
 import { PenaltyStore } from "./penaltyStore.js";
+import { ScheduleStore } from "./scheduleStore.js";
 import { VisionParser } from "./openaiParser.js";
 import { SubmissionStore } from "./storage.js";
 import type { SortableSubmissionField } from "./storage.js";
-import type { PenaltyProfile, StoredSubmission } from "./types.js";
+import type { PenaltyProfile, ScheduledMessage, StoredSubmission } from "./types.js";
 
 type LeaderboardCategory = SortableSubmissionField;
 
@@ -34,6 +35,7 @@ type OpenAiLikeError = {
 
 const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?(?:discord(?:app)?\.com\/invite|discord\.gg)\/[a-z0-9-]+/i;
 const COMMAND_PREFIX = ".";
+const MAX_TIMER_DELAY_MS = 2_147_000_000;
 const commandChannelIds = new Set(config.commandChannelIds);
 
 function isImageAttachment(attachment: Attachment): boolean {
@@ -414,6 +416,7 @@ function buildHelpReply(): string {
 
   if (config.devRoleId) {
     lines.push("\u{1F4C4} **.csv <statname>** \u2014 Dev-only top 10 CSV export for one stat");
+    lines.push("\u{1F4C5} **.schedule <epochtime> <channelId> <message>** \u2014 Dev-only scheduled message");
   }
 
   if (config.devRoleId && config.vipRoleId) {
@@ -705,12 +708,66 @@ const client = new Client({
 const store = new SubmissionStore(config.dataFile);
 const penaltyStore = new PenaltyStore(config.penaltyFile);
 const blacklistStore = new BlacklistStore(config.blacklistFile);
+const scheduleStore = new ScheduleStore(config.scheduleFile);
 const parser = new VisionParser(config.openAiApiKey, config.openAiModel);
+
+let scheduleTimer: NodeJS.Timeout | null = null;
+let isDeliveringScheduledMessages = false;
+
+function armScheduleTimer(): void {
+  if (scheduleTimer) {
+    clearTimeout(scheduleTimer);
+    scheduleTimer = null;
+  }
+
+  const nextSchedule = scheduleStore.list()[0];
+  if (!nextSchedule) {
+    return;
+  }
+
+  const delay = Math.min(Math.max(nextSchedule.sendAt - Date.now(), 0), MAX_TIMER_DELAY_MS);
+  scheduleTimer = setTimeout(() => {
+    scheduleTimer = null;
+    void deliverDueScheduledMessages();
+  }, delay);
+}
+
+async function deliverDueScheduledMessages(): Promise<void> {
+  if (isDeliveringScheduledMessages) {
+    return;
+  }
+
+  isDeliveringScheduledMessages = true;
+
+  try {
+    const dueSchedules = scheduleStore.list().filter((schedule) => schedule.sendAt <= Date.now());
+
+    for (const schedule of dueSchedules) {
+      try {
+        const channel = await client.channels.fetch(schedule.channelId);
+        if (!channel || !channel.isSendable() || channel.isDMBased() || channel.guildId !== schedule.guildId) {
+          throw new Error("The scheduled channel is unavailable or is not a sendable server channel.");
+        }
+
+        await channel.send(schedule.content);
+        console.log(`Sent scheduled message ${schedule.id} to channel ${schedule.channelId}.`);
+      } catch (error) {
+        console.error(`Failed to send scheduled message ${schedule.id} to channel ${schedule.channelId}`, error);
+      } finally {
+        scheduleStore.removeById(schedule.id);
+      }
+    }
+  } finally {
+    isDeliveringScheduledMessages = false;
+    armScheduleTimer();
+  }
+}
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   console.log(`Monitoring submission channel ${config.discordChannelId}`);
   console.log(`Command channels: ${config.commandChannelIds.join(", ")}`);
+  armScheduleTimer();
 });
 
 client.on(Events.MessageDelete, async (message) => {
@@ -1053,6 +1110,74 @@ client.on(Events.MessageCreate, async (message) => {
       await message.reply("\u26A0\uFE0F I couldn't update that stored stat. Please try again.");
       return;
     }
+  }
+
+  if (/^\.schedule(?:\s|$)/i.test(message.content.trim())) {
+    const permissionResult = runDevCommandPreflight(message, ".schedule");
+    if (permissionResult) {
+      await message.reply(permissionResult);
+      return;
+    }
+
+    const scheduleMatch = message.content.trim().match(/^\.schedule\s+(\S+)\s+(\S+)\s+([\s\S]+)$/i);
+    if (!scheduleMatch) {
+      await message.reply("\u2139\uFE0F Use `.schedule <epochtime> <channelId> <message>`. The epoch time must be in seconds.");
+      return;
+    }
+
+    const [, epochInput, channelInput, scheduledContent] = scheduleMatch;
+    const channelMentionMatch = channelInput.match(/^<#(\d+)>$/);
+    const channelId = channelMentionMatch?.[1] ?? channelInput;
+    const sendAtSeconds = /^\d+$/.test(epochInput) ? Number(epochInput) : Number.NaN;
+    const sendAt = sendAtSeconds * 1000;
+
+    if (!Number.isSafeInteger(sendAtSeconds) || !Number.isSafeInteger(sendAt) || Number.isNaN(new Date(sendAt).getTime())) {
+      await message.reply("\u26A0\uFE0F The epoch time must be a valid Unix timestamp in seconds.");
+      return;
+    }
+
+    if (sendAt <= Date.now()) {
+      await message.reply("\u26A0\uFE0F The scheduled time must be in the future.");
+      return;
+    }
+
+    if (!/^\d+$/.test(channelId)) {
+      await message.reply("\u26A0\uFE0F The channel ID must be a valid Discord channel ID or channel mention.");
+      return;
+    }
+
+    if (scheduledContent.length > 2_000) {
+      await message.reply("\u26A0\uFE0F The scheduled message cannot be longer than 2,000 characters.");
+      return;
+    }
+
+    const targetChannel = await message.client.channels.fetch(channelId).catch(() => null);
+    if (!targetChannel || !targetChannel.isSendable() || targetChannel.isDMBased() || targetChannel.guildId !== message.guildId) {
+      await message.reply("\u26A0\uFE0F I can't send messages to that channel. Make sure it is a message channel in this server and that I can access it.");
+      return;
+    }
+
+    const schedule: ScheduledMessage = {
+      id: randomUUID(),
+      guildId: message.guildId!,
+      channelId,
+      content: scheduledContent,
+      sendAt,
+      createdBy: message.author.id,
+      createdAt: new Date().toISOString()
+    };
+
+    scheduleStore.insert(schedule);
+    armScheduleTimer();
+
+    await message.reply([
+      "\u{1F4C5} **Message scheduled**",
+      "",
+      `**Channel:** <#${channelId}>`,
+      `**Send time:** <t:${sendAtSeconds}:F> (<t:${sendAtSeconds}:R>)`,
+      `**Message length:** ${scheduledContent.length} characters`
+    ].join("\n"));
+    return;
   }
 
   if (/^\.csv(?:\s|$)/i.test(message.content.trim())) {
