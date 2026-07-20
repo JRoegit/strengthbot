@@ -4,6 +4,7 @@ import {
   AttachmentBuilder,
   Client,
   Events,
+  Guild,
   GuildMember,
   GatewayIntentBits,
   Message,
@@ -367,6 +368,29 @@ function buildLeaderboardCsv(category: LeaderboardCategory): Buffer {
   ].join(","));
 
   return Buffer.from(["IsVIP,Name,Value", ...rows].join("\r\n"), "utf8");
+}
+
+async function syncVipFlagsForCsv(guild: Guild, submissions: StoredSubmission[]): Promise<number> {
+  let failedLookups = 0;
+
+  for (const submission of submissions) {
+    try {
+      const member = await guild.members.fetch({
+        user: submission.userId,
+        force: true
+      });
+      const hasVipRole = member.roles.cache.has(config.vipRoleId);
+
+      if (submission.vip !== hasVipRole) {
+        store.setVipByUserId(submission.userId, hasVipRole);
+      }
+    } catch (error) {
+      failedLookups += 1;
+      console.error(`Failed to check VIP role for ${submission.username} (${submission.userId})`, error);
+    }
+  }
+
+  return failedLookups;
 }
 
 function getCategoryFileName(category: LeaderboardCategory): string {
@@ -1194,7 +1218,18 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    if (!config.vipRoleId) {
+      await message.reply("\u26A0\uFE0F `.csv` cannot synchronize VIP status yet. Set `VIP_ROLE_ID` in the bot's environment.");
+      return;
+    }
+
+    const exportedSubmissions = store.getTopByCategory(category, 10);
+    const failedVipLookups = await syncVipFlagsForCsv(message.guild!, exportedSubmissions);
+
     await message.reply({
+      content: failedVipLookups > 0
+        ? `\u26A0\uFE0F VIP status could not be refreshed for ${failedVipLookups} exported player${failedVipLookups === 1 ? "" : "s"}; their stored flags were left unchanged.`
+        : undefined,
       files: [
         new AttachmentBuilder(buildLeaderboardCsv(category), {
           name: `leaderboard-${getCategoryFileName(category)}.csv`
